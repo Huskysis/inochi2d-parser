@@ -1,3 +1,5 @@
+use rustc_hash::FxHashMap;
+
 use crate::{owned::*, raw::*};
 
 impl<'p> From<PuppetRaw<'p>> for Puppet {
@@ -110,9 +112,9 @@ impl<'auto> From<AutomationRaw<'auto>> for Automation {
     }
 }
 
-impl<'anime> From<AnimationRaw<'anime>> for Animation {
-    fn from(_animation: AnimationRaw<'anime>) -> Self {
-        Animation {}
+impl<'anime> From<AnimationRaw<'anime>> for FxHashMap<String, Animation> {
+    fn from(animation: AnimationRaw<'anime>) -> Self {
+        animation.animations()
     }
 }
 

@@ -1,5 +1,7 @@
 use std::io::Read;
 
+use rustc_hash::FxHashMap;
+
 use crate::{
     parser::ParseRaw,
     raw::{JsonExt, PuppetRaw},
@@ -51,7 +53,7 @@ pub struct Puppet {
     pub automation: Automation,
     // pub automation: Vec<Automation>,
     /// Clips de animación pre-grabadas (no implementado en este modelo).
-    pub animations: Animation,
+    pub animations: FxHashMap<String, Animation>,
     // pub animations: Vec<Animation>,
     /// Grupos de nodos para organización visual en el editor.
     /// Las carpetas/jerarquías que ves en la UI del editor.
@@ -146,7 +148,7 @@ impl Puppet {
         Ok(puppet)
     }
 
-    pub fn from_source(source: &json::JsonValue) -> Self {
+    fn from_source(source: &json::JsonValue) -> Self {
         PuppetRaw::parse_raw(&source).into()
     }
 }
@@ -660,6 +662,33 @@ pub enum BlendMode {
     SliceFromLower,
 }
 
+impl BlendMode {
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            s if s.eq_ignore_ascii_case("normal") => Some(Self::Normal),
+            s if s.eq_ignore_ascii_case("multiply") => Some(Self::Multiply),
+            s if s.eq_ignore_ascii_case("screen") => Some(Self::Screen),
+            s if s.eq_ignore_ascii_case("overlay") => Some(Self::Overlay),
+            s if s.eq_ignore_ascii_case("darken") => Some(Self::Darken),
+            s if s.eq_ignore_ascii_case("lighten") => Some(Self::Lighten),
+            s if s.eq_ignore_ascii_case("colordodge") => Some(Self::ColorDodge),
+            s if s.eq_ignore_ascii_case("colorburn") => Some(Self::ColorBurn),
+            s if s.eq_ignore_ascii_case("hardlight") => Some(Self::HardLight),
+            s if s.eq_ignore_ascii_case("softlight") => Some(Self::SoftLight),
+            s if s.eq_ignore_ascii_case("lineardodge") => Some(Self::LinearDodge),
+            s if s.eq_ignore_ascii_case("difference") => Some(Self::Difference),
+            s if s.eq_ignore_ascii_case("exclusion") => Some(Self::Exclusion),
+            s if s.eq_ignore_ascii_case("add") => Some(Self::Add),
+            s if s.eq_ignore_ascii_case("subtract") => Some(Self::Subtract),
+            s if s.eq_ignore_ascii_case("cliptolower") => Some(Self::ClipToLower),
+            s if s.eq_ignore_ascii_case("slicefromlower") => Some(Self::SliceFromLower),
+            s if s.eq_ignore_ascii_case("inverse") => Some(Self::Inverse),
+            s if s.eq_ignore_ascii_case("destinationin") => Some(Self::DestinationIn),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Param {
     /// UUID del nodo padre (organización jerárquica de parámetros).
@@ -981,10 +1010,184 @@ pub enum MergeMode {
 #[derive(Debug)]
 pub struct Automation {}
 
-/// Clip de animación (estructura placeholder).
-/// No implementado en este modelo, pendiente de definición.
-#[derive(Debug)]
-pub struct Animation {}
+
+/// Clip de animación pre-grabada.
+/// Controla parámetros del puppet a lo largo del tiempo.
+#[derive(Debug, Clone)]
+pub struct Animation {
+    /// Nombre identificador.
+    pub name: String,
+
+    /// Duración de cada frame en segundos (0.01666... ≈ 60fps).
+    pub timestep: f32,
+
+    /// Si true, los valores se suman al estado actual en vez de reemplazar.
+    pub additive: bool,
+
+    /// Cantidad total de frames en la animación.
+    pub length: u32,
+
+    /// Frames de entrada (fade in).
+    pub lead_in: u32,
+
+    /// Frames de salida (fade out).
+    pub lead_out: u32,
+
+    /// Peso de la animación para blending (0.0-1.0).
+    pub weight: f32,
+
+    /// Pistas que controlan parámetros individuales.
+    pub lanes: Vec<AnimationLane>,
+}
+
+impl Animation {
+    /// Duración total en segundos.
+    #[inline]
+    pub fn duration(&self) -> f32 {
+        self.length as f32 * self.timestep
+    }
+
+    /// Convierte tiempo (segundos) a frame (puede ser fraccionario).
+    #[inline]
+    pub fn time_to_frame(&self, time: f32) -> f32 {
+        time / self.timestep
+    }
+
+    /// Convierte frame a tiempo en segundos.
+    #[inline]
+    pub fn frame_to_time(&self, frame: f32) -> f32 {
+        frame * self.timestep
+    }
+}
+
+/// Pista de animación que controla un parámetro específico.
+#[derive(Debug, Clone)]
+pub struct AnimationLane {
+    /// Tipo de interpolación entre keyframes.
+    pub interpolation: Interpolation,
+
+    /// UUID del parámetro objetivo.
+    pub param_uuid: u32,
+
+    /// Componente del parámetro (0=X, 1=Y para vec2).
+    pub target: u8,
+
+    /// Cómo combinar con otras animaciones/valores base.
+    pub merge_mode: LaneMergeMode,
+
+    /// Keyframes ordenados por frame.
+    pub keyframes: Vec<Keyframe>,
+}
+
+impl AnimationLane {
+    /// Evalúa el valor en un frame dado (puede ser fraccionario).
+    pub fn evaluate(&self, frame: f32) -> f32 {
+        if self.keyframes.is_empty() {
+            return 0.0;
+        }
+
+        // Antes del primer keyframe
+        if frame <= self.keyframes[0].frame as f32 {
+            return self.keyframes[0].value;
+        }
+
+        // Después del último keyframe
+        let last = &self.keyframes[self.keyframes.len() - 1];
+        if frame >= last.frame as f32 {
+            return last.value;
+        }
+
+        // Buscar keyframes adyacentes
+        let mut prev_idx = 0;
+        for (i, kf) in self.keyframes.iter().enumerate() {
+            if kf.frame as f32 > frame {
+                break;
+            }
+            prev_idx = i;
+        }
+
+        let prev = &self.keyframes[prev_idx];
+        let next = &self.keyframes[prev_idx + 1];
+
+        let t = (frame - prev.frame as f32) / (next.frame as f32 - prev.frame as f32);
+
+        match self.interpolation {
+            Interpolation::Stepped | Interpolation::Nearest => prev.value,
+            Interpolation::Linear => lerp(prev.value, next.value, t),
+            Interpolation::Cubic => {
+                // Catmull-Rom con tension
+                let tension = (prev.tension + next.tension) * 0.5;
+                cubic_interpolate(prev.value, next.value, t, tension)
+            }
+        }
+    }
+}
+
+/// Keyframe individual.
+#[derive(Debug, Clone, Copy)]
+pub struct Keyframe {
+    /// Índice del frame (entero).
+    pub frame: u32,
+
+    /// Valor en este frame.
+    pub value: f32,
+
+    /// Tensión para interpolación cúbica (0.0-1.0).
+    pub tension: f32,
+}
+
+/// Tipos de interpolación entre keyframes.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum Interpolation {
+    /// Interpola linealmente entre keyframes.
+    #[default]
+    Linear,
+
+    /// Salta al valor del keyframe anterior (sin suavizado).
+    Stepped,
+
+    /// Alias de Stepped (compatibilidad Inochi2D).
+    Nearest,
+
+    /// Interpolación cúbica suave (usa tension).
+    Cubic,
+}
+
+/// Modo de combinación de la pista con otros valores.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum LaneMergeMode {
+    /// Sobrescribe el valor (ignora otros).
+    #[default]
+    Forced,
+
+    /// Suma al valor existente.
+    Additive,
+
+    /// Multiplica con el valor existente.
+    Multiplicative,
+}
+
+#[inline]
+fn lerp(a: f32, b: f32, t: f32) -> f32 {
+    a + (b - a) * t
+}
+
+#[inline]
+fn cubic_interpolate(a: f32, b: f32, t: f32, tension: f32) -> f32 {
+    // Hermite con tension ajustable
+    let t2 = t * t;
+    let t3 = t2 * t;
+
+    // Tension 0.5 = Catmull-Rom estándar
+    let m = (1.0 - tension) * (b - a);
+
+    let h1 = 2.0 * t3 - 3.0 * t2 + 1.0;
+    let h2 = t3 - 2.0 * t2 + t;
+    let h3 = -2.0 * t3 + 3.0 * t2;
+    let h4 = t3 - t2;
+
+    h1 * a + h2 * m + h3 * b + h4 * m
+}
 
 /// Grupo de nodos para organización visual en editor.
 /// Las "carpetas" que ves en la UI, para facilitar navegación.

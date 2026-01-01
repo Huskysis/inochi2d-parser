@@ -1,11 +1,8 @@
-use json::{JsonValue, number::Number, object::Object};
+use json::{object::Object, JsonValue};
+use rustc_hash::FxHashMap;
 
 use crate::{
-    owned::{
-        BindingValues, BlendMode, CameraData, CompositeData, FlatDeformValues, FlatTransformValues,
-        Group, InterpolateMode, MaskData, MergeMode, Mesh, MeshGroupData, Param, ParamBinding,
-        ParamName, PartData, PhysicsMapMode, PhysicsModelType, SimplePhysicsData, Transform,
-    },
+    owned::*,
     parser::ParseRaw,
 };
 
@@ -13,18 +10,16 @@ use std::panic::Location;
 
 pub trait JsonExt {
     fn get(&self, key: &str) -> Option<&JsonValue>;
-    fn get_number(&self, key: &str) -> Option<Number>;
     fn get_str(&self, key: &str) -> Option<&str>;
     fn get_f32(&self, key: &str, default: f32) -> f32;
     fn get_bool(&self, key: &str, default: bool) -> bool;
     fn get_as_bool(&self, key: &str) -> Option<bool>;
     fn get_u32(&self, key: &str) -> Option<u32>;
     fn get_array(&self, key: &str) -> Option<&[JsonValue]>;
-    fn get_object(&self, key: &str) -> Option<&Object>;
     fn get_vec2(&self, key: &str) -> Option<[f32; 2]>;
     fn get_vec3(&self, key: &str) -> Option<[f32; 3]>;
-    fn as_object(&self) -> Option<&Object>;
     fn as_array(&self) -> Option<&[JsonValue]>;
+    fn as_object(&self) -> Option<&Object>;
 }
 
 impl JsonExt for JsonValue {
@@ -45,24 +40,6 @@ impl JsonExt for JsonValue {
             }
         }?
         .get(key)
-    }
-    #[inline]
-    #[track_caller]
-    fn get_number(&self, key: &str) -> Option<Number> {
-        // self.get(key).and_then(|v| v.as_number())
-        match self.get(key) {
-            Some(v) => v.as_number(),
-            None => {
-                let loc = Location::caller();
-                println!(
-                    "Error: get_number({key})at {}:{}:{}",
-                    loc.file(),
-                    loc.line(),
-                    loc.column()
-                );
-                return None;
-            }
-        }
     }
 
     #[inline]
@@ -176,35 +153,6 @@ impl JsonExt for JsonValue {
         }
     }
 
-    #[inline]
-    #[track_caller]
-    fn get_object(&self, key: &str) -> Option<&Object> {
-        match self.get(key) {
-            Some(v) => match v {
-                JsonValue::Object(obj) => Some(obj),
-                _ => {
-                    let loc = Location::caller();
-                    println!(
-                        "Error: get_object({key}) at {}:{}:{}",
-                        loc.file(),
-                        loc.line(),
-                        loc.column()
-                    );
-                    None
-                }
-            },
-            None => {
-                let loc = Location::caller();
-                println!(
-                    "Error: No get_object({key}) at {}:{}:{}",
-                    loc.file(),
-                    loc.line(),
-                    loc.column()
-                );
-                None
-            }
-        }
-    }
     #[inline]
     #[track_caller]
     fn get_vec2(&self, key: &str) -> Option<[f32; 2]> {
@@ -412,31 +360,7 @@ impl<'nd> NodeDataRaw<'nd> {
                 .collect(),
             blend_mode: {
                 let blend_mode = self.source.get_str("blend_mode");
-                match blend_mode {
-                    Some(v) => match v.to_ascii_lowercase().as_str() {
-                        "normal" => BlendMode::Normal,
-                        "multiply" => BlendMode::Multiply,
-                        "screen" => BlendMode::Screen,
-                        "overlay" => BlendMode::Overlay,
-                        "darken" => BlendMode::Darken,
-                        "lighten" => BlendMode::Lighten,
-                        "colordodge" => BlendMode::ColorDodge,
-                        "colorburn" => BlendMode::ColorBurn,
-                        "hardlight" => BlendMode::HardLight,
-                        "softlight" => BlendMode::SoftLight,
-                        "lineardodge" => BlendMode::LinearDodge,
-                        "difference" => BlendMode::Difference,
-                        "exclusion" => BlendMode::Exclusion,
-                        "add" => BlendMode::Add,
-                        "subtract" => BlendMode::Subtract,
-                        "cliptolower" => BlendMode::ClipToLower,
-                        "slicefromlower" => BlendMode::SliceFromLower,
-                        "inverse" => BlendMode::Inverse,
-                        "destinationin" => BlendMode::DestinationIn,
-                        _ => BlendMode::Normal,
-                    },
-                    None => BlendMode::Normal,
-                }
+                BlendMode::from_str(blend_mode.unwrap_or("normal")).unwrap_or(BlendMode::Normal)
             },
             tint: self.source.get_vec3("tint").unwrap_or([1.0, 1.0, 1.0]),
             screen_tint: self
@@ -462,9 +386,9 @@ impl<'nd> NodeDataRaw<'nd> {
             model_type: {
                 let model_type = self.source.get_str("model_type");
                 match model_type {
-                    Some(v) => match v.to_ascii_lowercase().as_str() {
-                        "pendulum" => PhysicsModelType::Pendulum,
-                        "springpendulum" => PhysicsModelType::SpringPendulum,
+                    Some(v) => match v {
+                        s if s.eq_ignore_ascii_case("pendulum") => PhysicsModelType::Pendulum,
+                        s if s.eq_ignore_ascii_case("springpendulum") => PhysicsModelType::SpringPendulum,
                         _ => PhysicsModelType::Pendulum,
                     },
                     None => PhysicsModelType::Pendulum,
@@ -473,11 +397,11 @@ impl<'nd> NodeDataRaw<'nd> {
             map_mode: {
                 let map_mode = self.source.get_str("map_mode");
                 match map_mode {
-                    Some(v) => match v.to_ascii_lowercase().as_str() {
-                        "anglelength" => PhysicsMapMode::AngleLength,
-                        "xy" => PhysicsMapMode::XY,
-                        "lengthangle" => PhysicsMapMode::LengthAngle,
-                        "yx" => PhysicsMapMode::YX,
+                    Some(v) => match v {
+                        v if v.eq_ignore_ascii_case("anglelength") => PhysicsMapMode::AngleLength,
+                        v if v.eq_ignore_ascii_case("xy") => PhysicsMapMode::XY,
+                        v if v.eq_ignore_ascii_case("lengthangle") => PhysicsMapMode::LengthAngle,
+                        v if v.eq_ignore_ascii_case("yx") => PhysicsMapMode::YX,
                         _ => PhysicsMapMode::AngleLength,
                     },
                     None => PhysicsMapMode::AngleLength,
@@ -497,31 +421,7 @@ impl<'nd> NodeDataRaw<'nd> {
         CompositeData {
             blend_mode: {
                 let blend_mode = self.source.get_str("blend_mode");
-                match blend_mode {
-                    Some(v) => match v.to_ascii_lowercase().as_str() {
-                        "normal" => BlendMode::Normal,
-                        "multiply" => BlendMode::Multiply,
-                        "screen" => BlendMode::Screen,
-                        "overlay" => BlendMode::Overlay,
-                        "darken" => BlendMode::Darken,
-                        "lighten" => BlendMode::Lighten,
-                        "colordodge" => BlendMode::ColorDodge,
-                        "colorburn" => BlendMode::ColorBurn,
-                        "hardlight" => BlendMode::HardLight,
-                        "softlight" => BlendMode::SoftLight,
-                        "lineardodge" => BlendMode::LinearDodge,
-                        "difference" => BlendMode::Difference,
-                        "exclusion" => BlendMode::Exclusion,
-                        "add" => BlendMode::Add,
-                        "subtract" => BlendMode::Subtract,
-                        "cliptolower" => BlendMode::ClipToLower,
-                        "slicefromlower" => BlendMode::SliceFromLower,
-                        "inverse" => BlendMode::Inverse,
-                        "destinationin" => BlendMode::DestinationIn,
-                        _ => BlendMode::Normal,
-                    },
-                    None => BlendMode::Normal,
-                }
+                BlendMode::from_str(blend_mode.unwrap_or("normal")).unwrap_or(BlendMode::Normal)
             },
             tint: self.source.get_vec3("tint").unwrap_or([1.0, 1.0, 1.0]),
             screen_tint: self
@@ -669,11 +569,10 @@ impl<'p> ParamRaw<'p> {
         let merge_mode = self.source.get_str("merge_mode");
         match merge_mode {
             Some(v) => {
-                let eq_mode = |pat: &str| -> bool { v.eq_ignore_ascii_case(pat) };
                 match v {
-                    _ if eq_mode("additive") => MergeMode::Additive,
-                    _ if eq_mode("multiply") => MergeMode::Multiplicative,
-                    _ if eq_mode("override") => MergeMode::Override,
+                    s if s.eq_ignore_ascii_case("additive") => MergeMode::Additive,
+                    s if s.eq_ignore_ascii_case("multiply") => MergeMode::Multiplicative,
+                    s if s.eq_ignore_ascii_case("override") => MergeMode::Override,
                     _ => MergeMode::Additive,
                 }
             }
@@ -722,17 +621,17 @@ impl<'p> ParamBindingRaw<'p> {
     pub fn param_name(&self) -> ParamName {
         let param_name = self.source.get_str("param_name");
         match param_name {
-            Some(v) => match v.to_ascii_lowercase().as_str() {
-                "transform.t.x" => ParamName::TransformTX,
-                "transform.t.y" => ParamName::TransformTY,
-                "transform.t.z" => ParamName::TransformTZ,
-                "transform.s.x" => ParamName::TransformSX,
-                "transform.s.y" => ParamName::TransformSY,
-                "transform.r.x" => ParamName::TransformRX,
-                "transform.r.y" => ParamName::TransformRY,
-                "transform.r.z" => ParamName::TransformRZ,
-                "deform" => ParamName::Deform,
-                "opacity" => ParamName::Opacity,
+            Some(v) => match v {
+                s if s.eq("transform.t.x") => ParamName::TransformTX,
+                s if s.eq("transform.t.y") => ParamName::TransformTY,
+                s if s.eq("transform.t.z") => ParamName::TransformTZ,
+                s if s.eq("transform.s.x") => ParamName::TransformSX,
+                s if s.eq("transform.s.y") => ParamName::TransformSY,
+                s if s.eq("transform.r.x") => ParamName::TransformRX,
+                s if s.eq("transform.r.y") => ParamName::TransformRY,
+                s if s.eq("transform.r.z") => ParamName::TransformRZ,
+                s if s.eq("deform") => ParamName::Deform,
+                s if s.eq("opacity") => ParamName::Opacity,
                 _ => ParamName::Other(v.to_string()),
             },
             None => ParamName::Other(String::new()),
@@ -782,10 +681,9 @@ impl<'p> ParamBindingRaw<'p> {
         let interpolate_mode = self.source.get_str("interpolate_mode");
         match interpolate_mode {
             Some(v) => {
-                let eq_mode = |pat: &str| -> bool { v.eq_ignore_ascii_case(pat) };
                 match v {
-                    _ if eq_mode("nearest") => InterpolateMode::Nearest,
-                    _ if eq_mode("linear") => InterpolateMode::Linear,
+                    s if s.eq_ignore_ascii_case("nearest") => InterpolateMode::Nearest,
+                    s if s.eq_ignore_ascii_case("linear") => InterpolateMode::Linear,
                     _ => InterpolateMode::Nearest,
                 }
             }
@@ -798,11 +696,143 @@ impl<'p> ParamBindingRaw<'p> {
 pub(crate) struct AutomationRaw<'a> {
     pub _source: &'a json::JsonValue,
 }
-// Placeholders
+
 pub(crate) struct AnimationRaw<'a> {
-    pub _source: &'a json::JsonValue,
+    pub source: &'a json::JsonValue,
 }
-// Placeholders
+
+impl<'a> AnimationRaw<'a> {
+    /// Parsea todas las animaciones del objeto "animations".
+    pub fn animations(&self) -> FxHashMap<String, Animation> {
+        let anims = match self.source.get("animations") {
+            Some(v) => v,
+            None => return FxHashMap::default(),
+        };
+
+        let obj = match anims.as_object() {
+            Some(o) => o,
+            None => return FxHashMap::default(),
+        };
+
+        let mut result = FxHashMap::default();
+
+        for (name, data) in obj.iter() {
+            let anim = AnimationDataRaw::new(data).parse(name);
+            result.insert(name.to_owned(), anim);
+        }
+
+        result
+    }
+}
+
+struct AnimationDataRaw<'a> {
+    source: &'a json::JsonValue,
+}
+
+impl<'a> AnimationDataRaw<'a> {
+    fn new(source: &'a json::JsonValue) -> Self {
+        Self { source }
+    }
+
+    fn parse(&self, name: &str) -> Animation {
+        Animation {
+            name: name.to_owned(),
+            timestep: self.source.get_f32("timestep", 0.016666668),
+            additive: self.source.get_bool("additive", false),
+            length: self.source.get_u32("length").unwrap_or(0),
+            lead_in: self.source.get_u32("leadIn").unwrap_or(0),
+            lead_out: self.source.get_u32("leadOut").unwrap_or(0),
+            weight: self.source.get_f32("animationWeight", 1.0),
+            lanes: self.parse_lanes(),
+        }
+    }
+
+    fn parse_lanes(&self) -> Vec<AnimationLane> {
+        let lanes = self.source.get_array("lanes").unwrap_or(&[]);
+
+        if lanes.is_empty() {
+            return Vec::new();
+        }
+
+        let mut result = Vec::with_capacity(lanes.len());
+
+        for lane_data in lanes {
+            let lane = LaneRaw::new(lane_data).parse();
+            result.push(lane);
+        }
+
+        result
+    }
+}
+
+struct LaneRaw<'a> {
+    source: &'a json::JsonValue,
+}
+
+impl<'a> LaneRaw<'a> {
+    fn new(source: &'a json::JsonValue) -> Self {
+        Self { source }
+    }
+
+    fn parse(&self) -> AnimationLane {
+        AnimationLane {
+            interpolation: self.parse_interpolation(),
+            param_uuid: self.source.get_u32("uuid").unwrap_or(0),
+            target: self.source.get_u32("target").unwrap_or(0) as u8,
+            merge_mode: self.parse_merge_mode(),
+            keyframes: self.parse_keyframes(),
+        }
+    }
+
+    fn parse_interpolation(&self) -> Interpolation {
+        let interp = self.source.get_str("interpolation");
+        match interp {
+            Some(v) => match v {
+                s if s.eq_ignore_ascii_case("linear") => Interpolation::Linear,
+                s if s.eq_ignore_ascii_case("stepped") => Interpolation::Stepped,
+                s if s.eq_ignore_ascii_case("nearest") => Interpolation::Nearest,
+                s if s.eq_ignore_ascii_case("cubic") => Interpolation::Cubic,
+                _ => Interpolation::Linear,
+            },
+            None => Interpolation::Linear,
+        }
+    }
+
+    fn parse_merge_mode(&self) -> LaneMergeMode {
+        let mode = self.source.get_str("merge_mode");
+        match mode {
+            Some(v) => match v {
+                s if s.eq_ignore_ascii_case("forced") => LaneMergeMode::Forced,
+                s if s.eq_ignore_ascii_case("additive") => LaneMergeMode::Additive,
+                s if s.eq_ignore_ascii_case("multiplicative") => LaneMergeMode::Multiplicative,
+                _ => LaneMergeMode::Forced,
+            },
+            None => LaneMergeMode::Forced,
+        }
+    }
+
+    fn parse_keyframes(&self) -> Vec<Keyframe> {
+        let keyframes = self.source.get_array("keyframes").unwrap_or(&[]);
+
+        if keyframes.is_empty() {
+            return Vec::new();
+        }
+
+        let mut result = Vec::with_capacity(keyframes.len());
+
+        for kf_data in keyframes {
+            let kf = Keyframe {
+                frame: kf_data.get_u32("frame").unwrap_or(0),
+                value: kf_data.get_f32("value", 0.0),
+                tension: kf_data.get_f32("tension", 0.5),
+            };
+            result.push(kf);
+        }
+
+        result
+    }
+}
+
 pub(crate) struct GroupRaw<'a> {
     pub source: &'a json::JsonValue,
 }

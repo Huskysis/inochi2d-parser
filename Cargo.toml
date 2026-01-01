@@ -12,3 +12,4 @@ categories = ["parser-implementations", "game-development"]
 
 [dependencies]
 json = "0.12"
+rustc-hash = "2.1"

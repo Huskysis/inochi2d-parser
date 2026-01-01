@@ -1,6 +1,6 @@
 use crate::{owned::Transform, raw::*};
 
-pub trait ParseRaw<'a> {
+pub(crate) trait ParseRaw<'a> {
     fn parse_raw(values: &'a json::JsonValue) -> Self;
 }
 
@@ -103,8 +103,7 @@ impl<'a> ParseRaw<'a> for AutomationRaw<'a> {
 
 impl<'a> ParseRaw<'a> for AnimationRaw<'a> {
     fn parse_raw(source: &'a json::JsonValue) -> Self {
-        // Placeholder
-        Self { _source: source }
+        Self { source: source }
     }
 }
 

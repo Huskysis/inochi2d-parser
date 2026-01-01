@@ -13,6 +13,7 @@ Soporte para los principales bloques del formato:
 - ✦ Puppet ✦
 - ✦ Nodos ✦
 - ✦ Parámetros ✦
+- ✦ Animación ✦
 - ✦ Grupos ✦
 - ✦ Extensiones de Vendor ✦
 
@@ -25,7 +26,6 @@ Cada sección se convierte en **tipos de dominio claros**, evitando acceso direc
 Actualmente fuera de mi alcance:
 
 - ✦ Automatización ✦
-- ✦ Animación ✦
 
 _(Estas capas están pensadas para un runtime o sistema de playback separado)_
 
