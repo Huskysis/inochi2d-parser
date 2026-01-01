@@ -47,7 +47,7 @@ pub struct Puppet {
     pub nodes: Node,
 
     /// Parámetros animables que controlan el puppet (sliders/dials).
-    pub params: Vec<Param>,
+    pub params: FxHashMap<u32, Param>,
 
     /// Pistas de automatización de parámetros (no implementado en este modelo).
     pub automation: Automation,

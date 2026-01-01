@@ -594,16 +594,16 @@ impl<'p> ParamRaw<'p> {
         result
     }
 
-    pub fn params(&self) -> Vec<Param> {
+    pub fn params(&self) -> FxHashMap<u32, Param> {
         let params = self.source.get_array("param").unwrap_or(&[]);
 
         if params.is_empty() {
-            return Vec::new();
+            return FxHashMap::default();
         }
-        let mut result = Vec::with_capacity(params.len());
+        let mut result = FxHashMap::default();
         for param in params {
             let param = ParamRaw::parse_raw(param);
-            result.push(param.into());
+            result.insert(param.uuid(), param.into());
         }
         result
     }
