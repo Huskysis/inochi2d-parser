@@ -33,6 +33,11 @@ _(Estas capas están pensadas para un runtime o sistema de playback separado)_
 
 ## ✦ Ejemplo de uso
 
+```toml
+[dependencies]
+inochi2d-parser = "0.1"
+```
+
 ```rust
 use inochi2d_parser::Puppet;
 
