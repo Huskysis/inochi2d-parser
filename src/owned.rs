@@ -28,41 +28,41 @@ fn read_vec<R: Read>(data: &mut R, n: usize) -> std::io::Result<Vec<u8>> {
     Ok(buf)
 }
 
-/// Estructura raíz del modelo puppet Inochi2D.
-/// Contiene metadatos, física, árbol de nodos, parámetros de animación y organización visual.
+/// Root structure of the Inochi2D puppet model.
+/// Contains metadata, physics, node tree, animation parameters and visual organization.
 #[derive(Debug)]
 pub struct Puppet {
-    /// Información de creador, versión y derechos.
+    /// Creator, version and rights information.
     pub meta: Meta,
 
-    /// Configuración de física global (gravedad, escala).
+    /// Global physics configuration (gravity, scale).
     pub physics: Physics,
 
-    /// Árbol jerárquico de nodos (raíz + children recursivos).
+    /// Hierarchical node tree (root + recursive children).
     pub nodes: Node,
 
-    /// Parámetros animables que controlan el puppet (sliders/dials).
+    /// Animatable parameters that control the puppet (sliders/dials).
     pub params: HashMap<u32, Param>,
 
-    /// Pistas de automatización de parámetros (no implementado en este modelo).
+    /// Parameter automation tracks (not implemented in this model).
     pub automation: Automation,
     // pub automation: Vec<Automation>,
-    /// Clips de animación pre-grabadas.
+    /// Pre-recorded animation clips.
     pub animations: HashMap<String, Animation>,
 
-    /// Grupos de nodos para organización visual en el editor.
-    /// Las carpetas/jerarquías que ves en la UI del editor.
+    /// Node groups for visual organization in the editor.
+    /// The folders/hierarchies you see in the editor UI.
     pub groups: Vec<Group>,
 
-    /// Datos extra de extensiones.
+    /// Extra vendor extension data.
     pub vendors: Vec<VendorData>,
 
-    /// Lista de texturas.
+    /// List of textures.
     pub textures: Vec<Texture>,
 }
 
 impl Puppet {
-    /// Carga un puppet desde un archivo.
+    /// Load a puppet from a file.
     pub fn open<P>(path: P) -> std::io::Result<Self>
     where
         P: AsRef<std::path::Path>,
@@ -71,13 +71,13 @@ impl Puppet {
         Self::from_reader(&mut file)
     }
 
-    /// Carga un puppet desde bytes en memoria.
+    /// Load a puppet from in-memory bytes.
     pub fn from_bytes(bytes: &[u8]) -> std::io::Result<Self> {
         let mut cursor = std::io::Cursor::new(bytes);
         Self::from_reader(&mut cursor)
     }
 
-    /// Carga un puppet desde cualquier `Read`.
+    /// Load a puppet from any `Read`.
     fn from_reader<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
         let magic = read_n::<_, 8>(reader)?;
 
@@ -128,7 +128,7 @@ impl Puppet {
                 .push(Texture::new(id, width, height, format, tex_data));
         }
 
-        // EXT_SECT (opcional - si EOF, devolver sin vendors)
+        // EXT_SECT (optional - if EOF, return without vendors)
         let ext_magic = match read_n::<_, 8>(reader) {
             Ok(m) => m,
             Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
@@ -181,40 +181,40 @@ impl Puppet {
     }
 }
 
-/// Metadatos del puppet (creador, versión, derechos, contacto).
+/// Puppet metadata (creator, version, rights, contact).
 #[derive(Debug)]
 pub struct Meta {
-    /// Nombre descriptivo del puppet.
+    /// Descriptive name of the puppet.
     pub name: Option<String>,
 
-    /// Versión del formato Inochi2D usado (ej: "1.0").
+    /// Inochi2D format version used (e.g. "1.0").
     pub version: String,
 
-    /// Nombre del rigger (quien armó el esqueleto).
+    /// Rigger name (who built the skeleton).
     pub rigger: Option<String>,
 
-    /// Nombre del artista que creó los assets visuales.
+    /// Name of the artist who created the visual assets.
     pub artist: Option<String>,
 
-    /// Derechos de uso y distribución.
+    /// Usage and distribution rights.
     pub rights: Option<String>,
 
-    /// Copyright del modelo.
+    /// Model copyright.
     pub copyright: Option<String>,
 
-    /// URL a licencia de uso.
+    /// URL to usage license.
     pub license_url: Option<String>,
 
-    /// Información de contacto del creador.
+    /// Creator contact information.
     pub contact: Option<String>,
 
-    /// Referencia visual o link del modelo.
+    /// Visual reference or link of the model.
     pub reference: Option<String>,
 
-    /// ID de textura para thumbnail en la UI (índice en el blob).
+    /// Texture ID for UI thumbnail (index in the blob).
     pub thumbnail_id: u32,
 
-    /// Si verdadero, preserva pixels durante render (sin suavizado).
+    /// If true, preserves pixels during render (no smoothing).
     pub preserve_pixels: bool,
 }
 
@@ -251,34 +251,34 @@ impl Physics {
     }
 }
 
-/// Nodo en el árbol jerárquico del puppet.
-/// Puede ser visual (Part, Camera) o contenedor (Composite, MeshGroup).
+/// Node in the puppet's hierarchical tree.
+/// Can be visual (Part, Camera) or container (Composite, MeshGroup).
 #[derive(Debug, Default)]
 pub struct Node {
-    /// Identificador único global del nodo.
+    /// Global unique identifier of the node.
     pub uuid: u32,
 
-    /// Nombre legible del nodo (visible en editor).
+    /// Readable node name (visible in editor).
     pub name: String,
 
-    /// Tipo específico de nodo y datos asociados (Part, Camera, etc).
+    /// Specific node type and associated data (Part, Camera, etc).
     pub type_node: NodeDataType,
 
-    /// Si falso, el nodo y sus hijos no se renderizan.
+    /// If false, the node and its children are not rendered.
     pub enabled: bool,
 
-    /// Orden Z (profundidad) en el render.
-    /// Valores mayores = más al frente.
+    /// Z order (depth) in render.
+    /// Higher values = more in front.
     pub zsort: f32,
 
-    /// Transformación local (posición, rotación, escala).
+    /// Local transform (position, rotation, scale).
     pub transform: Transform,
 
-    /// Si verdadero, la transformación no se afecta por parent.
-    /// Útil para UI o elementos fijos en pantalla.
+    /// If true, the transform is not affected by parent.
+    /// Useful for UI or screen-fixed elements.
     pub lock_to_root: bool,
 
-    /// Nodos hijos (estructura de árbol recursiva).
+    /// Child nodes (recursive tree structure).
     pub children: Vec<Node>,
 }
 
@@ -303,20 +303,20 @@ impl Node {
     }
 }
 
-/// Transformación local de un nodo.
-/// Se aplica relativa al nodo padre.
+/// Local transform of a node.
+/// Applied relative to parent node.
 #[derive(Debug, Clone, Default, Copy)]
 pub struct Transform {
-    /// Traslación (x, y, z en píxeles).
-    /// z típicamente 0.0, usado solo para profundidad relativa.
+    /// Translation (x, y, z in pixels).
+    /// z typically 0.0, used only for relative depth.
     pub translation: [f32; 3],
 
-    /// Rotación (x, y, z en radianes).
-    /// Típicamente solo z se usa (rotación 2D en plano XY).
+    /// Rotation (x, y, z in radians).
+    /// Typically only z is used (2D rotation in XY plane).
     pub rotation: [f32; 3],
 
-    /// Escala (sx, sy).
-    /// 1.0 = tamaño original, <1.0 = más pequeño, >1.0 = más grande.
+    /// Scale (sx, sy).
+    /// 1.0 = original size, <1.0 = smaller, >1.0 = larger.
     pub scale: [f32; 2],
 }
 
@@ -333,28 +333,28 @@ impl Transform {
     }
 }
 
-/// Tipos de nodos soportados en el árbol.
+/// Supported node types in the tree.
 #[derive(Debug, Default)]
 pub enum NodeDataType {
-    /// Nodo visual con mesh y texturas (cara, extremidades, etc).
+    /// Visual node with mesh and textures (face, limbs, etc).
     Part(PartData),
 
-    /// Nodo cámara (define viewport de render).
+    /// Camera node (defines render viewport).
     Camera(CameraData),
 
-    /// Nodo física simulada (pendulum/spring).
+    /// Simulated physics node (pendulum/spring).
     SimplePhysics(SimplePhysicsData),
 
-    /// Contenedor visual con blend mode y opacidad.
+    /// Visual container with blend mode and opacity.
     Composite(CompositeData),
 
-    /// Nodo que define máscara para clipping de descendientes.
+    /// Node defining a mask for clipping descendants.
     Mask(MaskData),
 
-    /// Grupo de meshes con deformación dinámica.
+    /// Group of meshes with dynamic deformation.
     MeshGroup(MeshGroupData),
 
-    /// Nodo genérico sin datos específicos (fallback).
+    /// Generic node with no specific data (fallback).
     #[default]
     Generic,
 }
@@ -413,24 +413,24 @@ impl NodeDataType {
     }
 }
 
-/// Geometría 3D de un nodo visual.
-/// Los vértices y UVs se almacenan como arrays planos para eficiencia.
+/// 3D geometry of a visual node.
+/// Vertices and UVs are stored as flat arrays for efficiency.
 #[derive(Debug, Default, Clone)]
 pub struct Mesh {
-    /// Posiciones de vértices (array plano: [x1, y1, x2, y2, ...]).
-    /// Cada par = coordenadas 2D de un vértice.
+    /// Vertex positions (flat array: [x1, y1, x2, y2, ...]).
+    /// Each pair = 2D coordinates of one vertex.
     pub vertices: Vec<f32>,
 
-    /// Índices de triángulos (triplas de índices en `vertices`).
-    /// Define qué vértices forman cada triángulo para render.
+    /// Triangle indices (triples of indices into `vertices`).
+    /// Defines which vertices form each triangle for render.
     pub indices: Vec<u32>,
 
-    /// Coordenadas UV (array plano: [u1, v1, u2, v2, ...]).
-    /// Mapeo de textura a vértices.
+    /// UV coordinates (flat array: [u1, v1, u2, v2, ...]).
+    /// Texture mapping per vertex.
     pub uvs: Vec<f32>,
 
-    /// Punto origen/pivote (x, y en píxeles).
-    /// Centro de rotación y transformación del mesh.
+    /// Origin/pivot point (x, y in pixels).
+    /// Center of rotation and transform for the mesh.
     pub origin: [f32; 2],
 }
 
@@ -452,10 +452,10 @@ fn parse_mesh(v: &json::JsonValue) -> Option<Mesh> {
     })
 }
 
-/// Datos de nodo máscara (define región de clipping).
+/// Mask node data (defines clipping region).
 #[derive(Debug, Default)]
 pub struct MaskData {
-    /// Geometría que define la forma de la máscara.
+    /// Geometry defining the mask shape.
     pub mesh: Option<Mesh>,
     // pub mask_mode: MaskMode,
 }
@@ -474,14 +474,14 @@ pub struct Mask {
     pub mode: MaskMode,
 }
 
-/// Modo de aplicación de máscara.
+/// Mask application mode.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MaskMode {
-    /// Clipping estándar (muestra solo dentro de la máscara).
+    /// Standard clipping (shows only inside the mask).
     #[default]
     Mask,
 
-    /// Dodge/inverse (muestra solo fuera de la máscara).
+    /// Dodge/inverse (shows only outside the mask).
     Dodge,
 }
 
@@ -507,42 +507,42 @@ fn parse_masks(v: &json::JsonValue) -> Vec<Mask> {
     result
 }
 
-/// Datos de un nodo visual (malla renderizable con texturas).
+/// Data for a visual node (renderable mesh with textures).
 #[derive(Debug, Default)]
 pub struct PartData {
-    /// Geometría del nodo (vértices, índices, UVs, origen).
+    /// Node geometry (vertices, indices, UVs, origin).
     pub mesh: Option<Mesh>,
 
-    /// Lista de índices de texturas a renderizar en este nodo.
+    /// List of texture indices to render in this node.
     ///
-    /// Múltiples texturas pueden apilarse (layers).
+    /// Multiple textures can be stacked (layers).
     ///
-    /// Indices segun la textura: `[0] = Albedo, [1] = Emissive, [2] = BumpMap`
+    /// Indices per texture slot: `[0] = Albedo, [1] = Emissive, [2] = BumpMap`
     // pub textures: Vec<u32>,
     pub textures: [u32; 3],
 
-    /// Modo de blending (Normal, Multiply, Screen, etc).
+    /// Blend mode (Normal, Multiply, Screen, etc).
     pub blend_mode: BlendMode,
 
-    /// Tint RGB aditivo (1.0, 1.0, 1.0 = sin cambio).
+    /// Additive RGB tint (1.0, 1.0, 1.0 = no change).
     pub tint: [f32; 3],
 
-    /// Screen tint (para efectos de luz/color de pantalla).
+    /// Screen tint (for screen light/color effects).
     pub screen_tint: [f32; 3],
 
-    /// Intensidad de emisión (glow/brillo del nodo).
+    /// Emission strength (node glow/brightness).
     pub emission_strength: f32,
 
-    /// Máscara de nodo (para masking).
+    /// Node mask (for masking).
     pub mask: Vec<Mask>,
 
-    /// Threshold para alpha clipping (máscara binaria).
+    /// Threshold for alpha clipping (binary mask).
     pub mask_threshold: f32,
 
-    /// Opacidad global (0.0 = transparente, 1.0 = opaco).
+    /// Global opacity (0.0 = transparent, 1.0 = opaque).
     pub opacity: f32,
 
-    /// Path en archivo PSD original (metadata de creación).
+    /// Path in original PSD file (creation metadata).
     pub psd_layer_path: Option<String>,
 }
 
@@ -578,11 +578,11 @@ impl PartData {
     }
 }
 
-/// Datos de nodo cámara (define región visible).
+/// Camera node data (defines visible region).
 #[derive(Debug, Default)]
 pub struct CameraData {
-    /// Viewport en píxeles (ancho, alto).
-    /// Define el área visible del render.
+    /// Viewport in pixels (width, height).
+    /// Defines the visible render area.
     pub viewport: [f32; 2],
 }
 
@@ -594,38 +594,38 @@ impl CameraData {
     }
 }
 
-/// Datos de nodo con simulación física.
-/// Simula comportamiento de cadenas/colas/accesorios.
+/// Node data with physics simulation.
+/// Simulates behavior of chains/tails/accessories.
 #[derive(Debug, Default)]
 pub struct SimplePhysicsData {
-    /// UUID del parámetro que controla la salida de física.
+    /// UUID of the parameter controlling the physics output.
     pub param: u32,
 
-    /// Tipo de simulación (Pendulum o SpringPendulum).
+    /// Simulation type (Pendulum or SpringPendulum).
     pub model_type: PhysicsModelType,
 
-    /// Cómo mapear ángulo/longitud a parámetro de salida.
+    /// How to map angle/length to output parameter.
     pub map_mode: PhysicsMapMode,
 
-    /// Gravedad para esta simulación (sobrescribe global si >0).
+    /// Gravity for this simulation (overrides global if >0).
     pub gravity: f32,
 
-    /// Longitud del "hueso" en píxeles.
+    /// Length of the "bone" in pixels.
     pub length: f32,
 
-    /// Frecuencia de oscilación (Hz).
+    /// Oscillation frequency (Hz).
     pub frequency: f32,
 
-    /// Amortiguación angular (reduce oscilación de ángulo).
+    /// Angular damping (reduces angle oscillation).
     pub angle_damping: f32,
 
-    /// Amortiguación de longitud (reduce oscilación de extensión).
+    /// Length damping (reduces extension oscillation).
     pub length_damping: f32,
 
-    /// Escala de salida del parámetro (sx, sy).
+    /// Parameter output scale (sx, sy).
     pub output_scale: [f32; 2],
 
-    /// Si verdadero, la física es relativa al nodo local (no global).
+    /// If true, physics is relative to local node (not global).
     pub local_only: Option<bool>,
 }
 
@@ -656,56 +656,56 @@ impl SimplePhysicsData {
     }
 }
 
-/// Tipos de modelos de física soportados.
+/// Supported physics model types.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PhysicsModelType {
-    /// Péndulo simple (oscila bajo gravedad).
+    /// Simple pendulum (oscillates under gravity).
     #[default]
     Pendulum,
 
-    /// Péndulo con resorte (oscila y se extiende).
+    /// Spring pendulum (oscillates and extends).
     SpringPendulum,
 }
 
-/// Modos de mapeo física → parámetro.
+/// Physics → parameter mapping modes.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PhysicsMapMode {
-    /// Ángulo y longitud (2D polar).
+    /// Angle and length (2D polar).
     #[default]
     AngleLength,
 
-    /// X e Y cartesiano.
+    /// Cartesian X and Y.
     XY,
 
-    /// Longitud y ángulo (orden inverso).
+    /// Length and angle (reverse order).
     LengthAngle,
 
-    /// Y e X cartesiano (order inverso).
+    /// Cartesian Y and X (reverse order).
     YX,
 }
 
-/// Datos de contenedor visual (agrupa nodos con propiedades compartidas).
+/// Visual container data (groups nodes with shared properties).
 #[derive(Debug, Default)]
 pub struct CompositeData {
-    /// Blend mode para todo el grupo.
+    /// Blend mode for the entire group.
     pub blend_mode: BlendMode,
 
-    /// Tint aditivo aplicado a todo el grupo.
+    /// Additive tint applied to the entire group.
     pub tint: [f32; 3],
 
-    /// Screen tint del grupo.
+    /// Group screen tint.
     pub screen_tint: [f32; 3],
 
-    /// Opacidad global del grupo.
+    /// Group global opacity.
     pub opacity: f32,
 
-    /// Lista de máscaras.
+    /// List of masks.
     pub mask: Vec<Mask>,
 
-    /// Threshold de alpha clipping.
+    /// Alpha clipping threshold.
     pub mask_threshold: f32,
 
-    /// Si verdadero, propaga propiedades de meshgroup a hijos.
+    /// If true, propagates meshgroup properties to children.
     pub propagate_meshgroup: Option<bool>,
 }
 
@@ -724,16 +724,16 @@ impl CompositeData {
     }
 }
 
-/// Datos de grupo de meshes (permite deformación dinámica).
+/// Mesh group data (enables dynamic deformation).
 #[derive(Debug, Default)]
 pub struct MeshGroupData {
-    /// Geometría del grupo (puede ser deformada por parámetros).
+    /// Group geometry (can be deformed by parameters).
     pub mesh: Option<Mesh>,
 
-    /// Si verdadero, la malla puede deformarse dinámicamente.
+    /// If true, the mesh can be dynamically deformed.
     pub dynamic_deformation: bool,
 
-    /// Si verdadero, trasforma los nodos hijos junto con la malla.
+    /// If true, transforms child nodes along with the mesh.
     pub translate_children: bool,
 }
 
@@ -747,66 +747,66 @@ impl MeshGroupData {
     }
 }
 
-/// Modos de blending para composición visual.
-/// Define cómo se fusionan colores de nodos superpuestos.
+/// Blending modes for visual composition.
+/// Defines how colors of overlapping nodes are merged.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BlendMode {
-    /// Blend normal (alpha compositing estándar).
+    /// Normal blend (standard alpha compositing).
     #[default]
     Normal,
 
-    /// Multiplica colores (oscurece).
+    /// Multiply colors (darken).
     Multiply,
 
-    /// Screen blend (aclara, efecto de luz).
+    /// Screen blend (lighten, light effect).
     Screen,
 
-    /// Overlay (combina Multiply y Screen).
+    /// Overlay (combines Multiply and Screen).
     Overlay,
 
-    /// Darken (solo píxeles más oscuros).
+    /// Darken (only darker pixels).
     Darken,
 
-    /// Lighten (solo píxeles más claros).
+    /// Lighten (only lighter pixels).
     Lighten,
 
-    /// Color dodge (aclara selectivamente).
+    /// Color dodge (lightens selectively).
     ColorDodge,
 
-    /// Linear dodge (aclara linealmente).
+    /// Linear dodge (lightens linearly).
     LinearDodge,
 
-    /// Add (suma colores, efecto glow).
+    /// Add (sums colors, glow effect).
     Add,
 
-    /// Color burn (oscurece selectivamente).
+    /// Color burn (darkens selectively).
     ColorBurn,
 
-    /// Hard light (contraste fuerte).
+    /// Hard light (strong contrast).
     HardLight,
 
-    /// Soft light (contraste suave).
+    /// Soft light (soft contrast).
     SoftLight,
 
-    /// Subtract (resta colores).
+    /// Subtract (subtracts colors).
     Subtract,
 
-    /// Difference (diferencia absoluta de colores).
+    /// Difference (absolute color difference).
     Difference,
 
-    /// Exclusion (diferencia suave).
+    /// Exclusion (soft difference).
     Exclusion,
 
-    /// Inverse (invierte según factor del color superpuesto).
+    /// Inverse (inverts based on overlapping color factor).
     Inverse,
 
-    /// DestinationIn (mantiene solo píxeles donde hay destino).
+    /// DestinationIn (keeps only pixels where destination exists).
     DestinationIn,
 
-    /// ClipToLower (clipping respetando transparencia, contra contenido inferior).
+    /// ClipToLower (clipping respecting transparency, against lower content).
     ClipToLower,
 
-    /// SliceFromLower (inverso de ClipToLower, corta por lo inferior).
+    /// SliceFromLower (inverse of ClipToLower, cuts by lower content).
     SliceFromLower,
 }
 
@@ -839,35 +839,35 @@ impl BlendMode {
 
 #[derive(Debug)]
 pub struct Param {
-    /// UUID del nodo padre (organización jerárquica de parámetros).
+    /// Parent node UUID (hierarchical parameter organization).
     pub parent_uuid: Option<u32>,
 
-    /// Identificador único global del parámetro.
+    /// Global unique identifier of the parameter.
     pub uuid: u32,
 
-    /// Nombre legible (visible en UI como slider).
+    /// Readable name (visible in UI as slider).
     pub name: String,
 
-    /// Si verdadero, es vector 2D (X, Y); si falso, es escalar.
+    /// If true, is 2D vector (X, Y); if false, is scalar.
     pub is_vec2: bool,
 
-    /// Valor mínimo permitido (x, y si es vec2).
+    /// Minimum allowed value (x, y if vec2).
     pub min: [f32; 2],
 
-    /// Valor máximo permitido (x, y si es vec2).
+    /// Maximum allowed value (x, y if vec2).
     pub max: [f32; 2],
 
-    /// Valor por defecto al cargar (x, y si es vec2).
+    /// Default value at load (x, y if vec2).
     pub defaults: [f32; 2],
 
-    /// Puntos en los ejes X e Y para interpolación discreta.
-    /// Permite snap a valores específicos.
+    /// Points on X and Y axes for discrete interpolation.
+    /// Allows snap to specific values.
     pub axis_points: [Vec<f32>; 2],
 
-    /// Cómo se combinan múltiples bindings que afectan el mismo target.
+    /// How multiple bindings affecting the same target are combined.
     pub merge_mode: MergeMode,
 
-    /// Lista de nodos/propiedades que este parámetro afecta.
+    /// List of nodes/properties this parameter affects.
     pub bindings: Vec<ParamBinding>,
 }
 
@@ -913,25 +913,25 @@ fn parse_axis_points(v: &json::JsonValue) -> [Vec<f32>; 2] {
     [parse_axis(&axis[0]), parse_axis(&axis[1])]
 }
 
-/// Vinculación entre un parámetro y una propiedad de nodo.
-/// Define qué propiedad anima y con qué valores.
+/// Binding between a parameter and a node property.
+/// Defines what property is animated and with what values.
 #[derive(Debug, Clone)]
 pub struct ParamBinding {
-    /// UUID del nodo objetivo que será animado.
+    /// UUID of the target node to be animated.
     pub node: u32,
 
-    /// Propiedad específica del nodo (TransformTX, Deform, Opacity, etc).
+    /// Specific node property (TransformTX, Deform, Opacity, etc).
     pub param_name: ParamName,
 
-    /// Valores de keyframes para cada frame.
-    /// Se interpolan entre frames según `interpolate_mode`.
+    /// Keyframe values for each frame.
+    /// Interpolated between frames according to `interpolate_mode`.
     pub values: BindingValues,
 
-    /// Máscara de frames "activos" (para animaciones parciales).
-    /// Estructura: [frame][vertex_index] = true si keyframe existe.
+    /// Mask of "active" frames (for partial animations).
+    /// Structure: [frame][vertex_index] = true if keyframe exists.
     pub is_set: Vec<Vec<bool>>,
 
-    /// Tipo de interpolación entre keyframes (Nearest o Linear).
+    /// Interpolation type between keyframes (Nearest or Linear).
     pub interpolate_mode: Interpolation,
 }
 
@@ -979,41 +979,41 @@ fn parse_is_set(v: &json::JsonValue) -> Vec<Vec<bool>> {
         .collect()
 }
 
-/// Propiedades de nodos que pueden ser animadas por parámetros.
+/// Node properties that can be animated by parameters.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub enum ParamName {
-    /// Traslación X (transform.translation.x).
+    /// Translation X (transform.translation.x).
     TransformTX,
 
-    /// Traslación Y (transform.translation.y).
+    /// Translation Y (transform.translation.y).
     TransformTY,
 
-    /// Traslación Z (transform.translation.z).
+    /// Translation Z (transform.translation.z).
     TransformTZ,
 
-    /// Escala X.
+    /// Scale X.
     TransformSX,
 
-    /// Escala Y.
+    /// Scale Y.
     TransformSY,
 
-    /// Rotación X (radianes).
+    /// Rotation X (radians).
     TransformRX,
 
-    /// Rotación Y (radianes).
+    /// Rotation Y (radians).
     TransformRY,
 
-    /// Rotación Z (radianes, típicamente la usada).
+    /// Rotation Z (radians, typically the one used).
     TransformRZ,
 
-    /// Deformación de malla (mesh warping).
+    /// Mesh deformation (mesh warping).
     Deform,
 
     #[default]
-    /// Opacidad del nodo.
+    /// Node opacity.
     Opacity,
 
-    /// Otro parámetro desconocido.
+    /// Other unknown parameter.
     Other(String),
 }
 
@@ -1034,31 +1034,31 @@ fn parse_param_name(s: Option<&str>) -> ParamName {
     }
 }
 
-/// Valores de keyframes para un binding.
-/// Puede ser transformación (escalar) o deformación (vértices).
+/// Keyframe values for a binding.
+/// Can be transform (scalar) or deformation (vertices).
 #[derive(Debug, Clone)]
 pub enum BindingValues {
-    /// Valores para propiedades transform/opacity (1 valor por frame).
+    /// Values for transform/opacity properties (1 value per frame).
     Transform(FlatTransformValues),
 
-    /// Valores para deformación (2D offsets por vértice).
+    /// Values for deformation (2D offsets per vertex).
     Deform(FlatDeformValues),
 
-    /// Fallback para tipos desconocidos.
+    /// Fallback for unknown types.
     Other(json::JsonValue),
 }
 
-/// Almacenamiento eficiente de keyframes de transformación.
-/// Se deserializa desde `Vec<Vec<f32>>` pero se almacena plano.
+/// Efficient storage of transform keyframes.
+/// Deserialized from `Vec<Vec<f32>>` but stored flat.
 #[derive(Debug, Clone)]
 pub struct FlatTransformValues {
-    /// Buffer plano de datos: [frame0_val0, frame0_val1, ..., frame1_val0, ...]
+    /// Flat data buffer: [frame0_val0, frame0_val1, ..., frame1_val0, ...]
     pub data: Vec<f32>,
 
-    /// Cantidad de frames en la animación.
+    /// Number of frames in the animation.
     pub frames: usize,
 
-    /// Cantidad de valores por frame (típicamente 1, a veces más).
+    /// Number of values per frame (typically 1, sometimes more).
     pub values_per_frame: usize,
 }
 
@@ -1098,8 +1098,8 @@ impl FlatTransformValues {
             values_per_frame,
         }
     }
-    /// Obtiene un valor específico de un frame e índice.
-    /// O(1) access con indexación lineal.
+    /// Get a specific value from a frame and index.
+    /// O(1) access with linear indexing.
     pub fn get(&self, frame: usize, index: usize) -> Option<f32> {
         if frame >= self.frames || index >= self.values_per_frame {
             return None;
@@ -1109,28 +1109,28 @@ impl FlatTransformValues {
             .copied()
     }
 
-    /// Devolver la cantidad de frames.
+    /// Return the number of frames.
     pub fn frames(&self) -> usize {
         self.frames
     }
 
-    /// Devolver valores por frame.
+    /// Return values per frame.
     pub fn values_per_frame(&self) -> usize {
         self.values_per_frame
     }
 }
 
-/// Almacenamiento eficiente de keyframes de deformación.
-/// Se deserializa desde `Vec<Vec<Vec<Vec<f32>>>>` pero se almacena plano.
+/// Efficient storage of deformation keyframes.
+/// Deserialized from `Vec<Vec<Vec<Vec<f32>>>>` but stored flat.
 #[derive(Debug, Clone)]
 pub struct FlatDeformValues {
-    /// Buffer plano de floats: [f0_v0_xy, f0_v1_xy, ..., f1_v0_xy, ...]
+    /// Flat float buffer: [f0_v0_xy, f0_v1_xy, ..., f1_v0_xy, ...]
     pub data: Vec<[f32; 2]>,
 
-    /// Cantidad de frames.
+    /// Number of frames.
     pub frames: usize,
 
-    /// Cantidad de vértices por frame.
+    /// Number of vertices per frame.
     pub vertices_per_frame: usize,
 }
 
@@ -1182,8 +1182,8 @@ impl FlatDeformValues {
             vertices_per_frame,
         }
     }
-    /// Obtiene el offset [x, y] de un vértice en un frame específico.
-    /// O(1) access con cálculo directo de índice.
+    /// Get the [x, y] offset of a vertex at a specific frame.
+    /// O(1) access with direct index computation.
     pub fn get(&self, frame: usize, vertex: usize) -> Option<[f32; 2]> {
         if frame >= self.frames || vertex >= self.vertices_per_frame {
             return None;
@@ -1192,18 +1192,18 @@ impl FlatDeformValues {
         self.data.get(idx).copied()
     }
 
-    /// Devolver la cantidad total de frames.
+    /// Return the total number of frames.
     pub fn frames(&self) -> usize {
         self.frames
     }
 
-    /// Devolver vértices por frame.
+    /// Return vertices per frame.
     pub fn vertices_per_frame(&self) -> usize {
         self.vertices_per_frame
     }
 
-    /// Obtiene todos los offsets de un frame (slice extraído).
-    /// Útil para aplicar deformación completa a una malla.
+    /// Get all offsets of a frame (extracted slice).
+    /// Useful for applying full deformation to a mesh.
     pub fn get_frame(&self, frame: usize) -> Option<&[[f32; 2]]> {
         if frame >= self.frames {
             return None;
@@ -1215,16 +1215,16 @@ impl FlatDeformValues {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MergeMode {
-    /// Suma los efectos (default para rotación, deform).
+    /// Sums effects (default for rotation, deform).
     Additive,
 
-    /// Multiplica los efectos (default para escala).
+    /// Multiplies effects (default for scale).
     Multiplicative,
 
-    /// Sobrescribe (último parámetro gana).
+    /// Overwrites (last parameter wins).
     Override,
 
-    /// Ignora los valores existentes.
+    /// Ignores existing values.
     Forced,
 }
 
@@ -1237,21 +1237,21 @@ fn parse_merge_mode(s: Option<&str>) -> MergeMode {
     }
 }
 
-/// Tipos de interpolación entre keyframes.
+/// Interpolation types between keyframes.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum Interpolation {
-    /// Interpola linealmente entre frames (suavizado).
+    /// Linearly interpolates between frames (smoothed).
     #[default]
     Linear,
 
-    /// Salta al valor del keyframe anterior (sin suavizado).
+    /// Jumps to previous keyframe value (no smoothing).
     Stepped,
 
-    /// Alias de Stepped (compatibilidad Inochi2D).  
-    /// Redondea al frame más cercano (sin suavizado).
+    /// Alias of Stepped (Inochi2D compatibility).
+    /// Rounds to the nearest frame (no smoothing).
     Nearest,
 
-    /// Interpolación cúbica suave (usa tension).
+    /// Smooth cubic interpolation (uses tension).
     Cubic,
 }
 
@@ -1265,54 +1265,54 @@ fn parse_interpolation(s: Option<&str>) -> Interpolation {
     }
 }
 
-/// Pista de automatización (estructura placeholder).
-/// No implementado en este modelo, pendiente de definición.
+/// Automation track (placeholder struct).
+/// Not implemented in this model, pending definition.
 #[derive(Debug)]
 pub struct Automation {}
 
-/// Clip de animación pre-grabada.
-/// Controla parámetros del puppet a lo largo del tiempo.
+/// Pre-recorded animation clip.
+/// Controls puppet parameters over time.
 #[derive(Debug, Clone)]
 pub struct Animation {
-    /// Nombre identificador.
+    /// Identifier name.
     pub name: String,
 
-    /// Duración de cada frame en segundos (0.01666... ≈ 60fps).
+    /// Duration of each frame in seconds (0.01666... ≈ 60fps).
     pub timestep: f32,
 
-    /// Si true, los valores se suman al estado actual en vez de reemplazar.
+    /// If true, values are added to current state instead of replacing.
     pub additive: bool,
 
-    /// Cantidad total de frames en la animación.
+    /// Total number of frames in the animation.
     pub length: u32,
 
-    /// Frames de entrada (fade in).
+    /// Lead-in frames (fade in).
     pub lead_in: u32,
 
-    /// Frames de salida (fade out).
+    /// Lead-out frames (fade out).
     pub lead_out: u32,
 
-    /// Peso de la animación para blending (0.0-1.0).
+    /// Animation weight for blending (0.0-1.0).
     pub weight: f32,
 
-    /// Pistas que controlan parámetros individuales.
+    /// Tracks controlling individual parameters.
     pub lanes: Vec<AnimationLane>,
 }
 
 impl Animation {
-    /// Duración total en segundos.
+    /// Total duration in seconds.
     #[inline]
     pub fn duration(&self) -> f32 {
         self.length as f32 * self.timestep
     }
 
-    /// Convierte tiempo (segundos) a frame (puede ser fraccionario).
+    /// Convert time (seconds) to frame (can be fractional).
     #[inline]
     pub fn time_to_frame(&self, time: f32) -> f32 {
         time / self.timestep
     }
 
-    /// Convierte frame a tiempo en segundos.
+    /// Convert frame to time in seconds.
     #[inline]
     pub fn frame_to_time(&self, frame: f32) -> f32 {
         frame * self.timestep
@@ -1346,44 +1346,44 @@ fn parse_animations(root: &json::JsonValue) -> HashMap<String, Animation> {
     map
 }
 
-/// Pista de animación que controla un parámetro específico.
+/// Animation lane that controls a specific parameter.
 #[derive(Debug, Clone)]
 pub struct AnimationLane {
-    /// Tipo de interpolación entre keyframes.
+    /// Interpolation type between keyframes.
     pub interpolation: Interpolation,
 
-    /// UUID del parámetro objetivo.
+    /// Target parameter UUID.
     pub param_uuid: u32,
 
-    /// Componente del parámetro (0=X, 1=Y para vec2).
+    /// Parameter component (0=X, 1=Y for vec2).
     pub target: u8,
 
-    /// Cómo combinar con otras animaciones/valores base.
+    /// How to combine with other animations/base values.
     pub merge_mode: MergeMode,
 
-    /// Keyframes ordenados por frame.
+    /// Keyframes ordered by frame.
     pub keyframes: Vec<Keyframe>,
 }
 
 impl AnimationLane {
-    /// Evalúa el valor en un frame dado (puede ser fraccionario).
+    /// Evaluate the value at a given frame (can be fractional).
     pub fn evaluate(&self, frame: f32) -> f32 {
         if self.keyframes.is_empty() {
             return 0.0;
         }
 
-        // Antes del primer keyframe
+        // Before the first keyframe
         if frame <= self.keyframes[0].frame as f32 {
             return self.keyframes[0].value;
         }
 
-        // Después del último keyframe
+        // After the last keyframe
         let last = &self.keyframes[self.keyframes.len() - 1];
         if frame >= last.frame as f32 {
             return last.value;
         }
 
-        // Buscar keyframes adyacentes
+        // Find adjacent keyframes
         let mut prev_idx = 0;
         for (i, kf) in self.keyframes.iter().enumerate() {
             if kf.frame as f32 > frame {
@@ -1401,7 +1401,7 @@ impl AnimationLane {
             Interpolation::Stepped | Interpolation::Nearest => prev.value,
             Interpolation::Linear => lerp(prev.value, next.value, t),
             Interpolation::Cubic => {
-                // Catmull-Rom con tension
+                // Catmull-Rom with tension
                 let tension = (prev.tension + next.tension) * 0.5;
                 cubic_interpolate(prev.value, next.value, t, tension)
             }
@@ -1423,16 +1423,16 @@ fn parse_lanes(v: &json::JsonValue) -> Vec<AnimationLane> {
         .collect()
 }
 
-/// Keyframe individual.
+/// Single keyframe.
 #[derive(Debug, Clone, Copy)]
 pub struct Keyframe {
-    /// Índice del frame (entero).
+    /// Frame index (integer).
     pub frame: u32,
 
-    /// Valor en este frame.
+    /// Value at this frame.
     pub value: f32,
 
-    /// Tensión para interpolación cúbica (0.0-1.0).
+    /// Tension for cubic interpolation (0.0-1.0).
     pub tension: f32,
 }
 
@@ -1447,17 +1447,17 @@ fn parse_keyframes(v: &json::JsonValue) -> Vec<Keyframe> {
         .collect()
 }
 
-/// Grupo de nodos para organización visual en editor.
-/// Las "carpetas" que ves en la UI, para facilitar navegación.
+/// Node group for visual organization in editor.
+/// The "folders" you see in the UI, for easier navigation.
 #[derive(Debug)]
 pub struct Group {
-    /// UUID único del grupo.
+    /// Unique group UUID.
     pub group_uuid: u32,
 
-    /// Nombre legible del grupo (ej: "Head", "Eyes", "Hair").
+    /// Readable group name (e.g. "Head", "Eyes", "Hair").
     pub name: String,
 
-    /// Color RGB normalizado [0.0-1.0] para visualización en editor.
+    /// Normalized RGB color [0.0-1.0] for editor visualization.
     pub color: [f32; 3],
 }
 
@@ -1482,20 +1482,20 @@ pub struct VendorData {
     pub data: json::JsonValue,
 }
 
-/// Formatos de textura soportados.
+/// Supported texture formats.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum TextureFormat {
-    /// Formato PNG (sin pérdida, con canal alpha).
+    /// PNG format (lossless, with alpha channel).
     Png = 0,
-    /// Formato TGA (sin pérdida).
+    /// TGA format (lossless).
     Tga = 1,
-    /// Formato BC7/BPTC (comprimido, con pérdida).
+    /// BC7/BPTC format (compressed, lossy).
     Bc7 = 2,
 }
 
 impl TextureFormat {
-    /// Intenta crear un `TextureFormat` a partir de un byte.
+    /// Try to create a `TextureFormat` from a byte.
     pub fn from_byte(b: u8) -> Option<Self> {
         match b {
             0 => Some(Self::Png),
@@ -1505,7 +1505,7 @@ impl TextureFormat {
         }
     }
 
-    /// Devuelve la extensión del archivo asociada a este formato.
+    /// Returns the file extension associated with this format.
     pub fn extension(&self) -> &'static str {
         match self {
             Self::Png => "png",
@@ -1514,17 +1514,17 @@ impl TextureFormat {
         }
     }
 
-    /// Obtiene el ancho y alto de una imagen a partir de sus bytes,
-    /// según el formato de la textura.
+    /// Gets width and height of an image from its bytes,
+    /// according to the texture format.
     pub fn get_img_dim(&self, data: &[u8]) -> std::io::Result<(u32, u32)> {
         match self {
             TextureFormat::Png => {
-                // Cabecera PNG:
-                // El ancho y alto están en los bytes 16–23 (big endian)
+                // PNG header:
+                // Width and height are in bytes 16–23 (big endian)
                 if data.len() < 24 {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
-                        "Datos PNG inválidos (demasiado cortos)",
+                        "Invalid PNG data (too short)",
                     ));
                 }
 
@@ -1535,12 +1535,12 @@ impl TextureFormat {
             }
 
             TextureFormat::Tga => {
-                // Cabecera TGA:
-                // Ancho en bytes 12–13 y alto en 14–15 (little endian)
+                // TGA header:
+                // Width in bytes 12–13 and height in 14–15 (little endian)
                 if data.len() < 18 {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
-                        "Datos TGA inválidos (demasiado cortos)",
+                        "Invalid TGA data (too short)",
                     ));
                 }
 
@@ -1551,9 +1551,9 @@ impl TextureFormat {
             }
 
             TextureFormat::Bc7 => {
-                // BC7 no tiene una cabecera estándar propia.
-                // Normalmente se encuentra dentro de contenedores DDS o KTX.
-                // Por ahora devolvemos valores placeholder.
+                // BC7 has no standard header of its own.
+                // Typically found inside DDS or KTX containers.
+                // For now we return placeholder values.
                 Ok((0, 0))
             }
         }
@@ -1566,32 +1566,32 @@ impl Default for TextureFormat {
     }
 }
 
-/// Almacenamiento interno de los datos de la textura.
+/// Internal storage of texture data.
 #[derive(Debug, Clone)]
 pub enum TextureData {
-    /// Datos codificados (PNG, TGA, BC7).
+    /// Encoded data (PNG, TGA, BC7).
     Encoded(Vec<u8>),
-    /// Datos decodificados en formato RGBA8.
+    /// Decoded data in RGBA8 format.
     Rgba(Vec<u8>),
 }
 
-/// Una textura usada por el puppet.
+/// A texture used by the puppet.
 #[derive(Debug, Clone)]
 pub struct Texture {
-    /// ID único (índice dentro del array de texturas del puppet).
+    /// Unique ID (index inside the puppet texture array).
     pub id: u32,
-    /// Ancho en píxeles.
+    /// Width in pixels.
     pub width: u32,
-    /// Alto en píxeles.
+    /// Height in pixels.
     pub height: u32,
-    /// Formato de los datos de la textura.
+    /// Texture data format.
     pub format: TextureFormat,
-    /// Datos de la textura.
+    /// Texture data.
     pub data: TextureData,
 }
 
 impl Texture {
-    /// Crea una nueva textura con los parámetros dados.
+    /// Creates a new texture with the given parameters.
     pub fn new(id: u32, width: u32, height: u32, format: TextureFormat, data: Vec<u8>) -> Self {
         Self {
             id,
@@ -1602,14 +1602,14 @@ impl Texture {
         }
     }
 
-    /// Intenta calcular las dimensiones de la textura a partir
-    /// de los datos codificados y el formato.
+    /// Try to compute the texture dimensions from
+    /// the encoded data and the format.
     pub fn dimensions_from_data(&self) -> std::io::Result<(u32, u32)> {
         match &self.data {
             TextureData::Encoded(bytes) => self.format.get_img_dim(bytes),
             TextureData::Rgba(_) => {
-                // Si los datos ya están decodificados, usamos
-                // las dimensiones almacenadas
+                // If data is already decoded, use
+                // the stored dimensions
                 Ok((self.width, self.height))
             }
         }
@@ -1623,11 +1623,11 @@ fn lerp(a: f32, b: f32, t: f32) -> f32 {
 
 #[inline]
 fn cubic_interpolate(a: f32, b: f32, t: f32, tension: f32) -> f32 {
-    // Hermite con tension ajustable
+    // Hermite with adjustable tension
     let t2 = t * t;
     let t3 = t2 * t;
 
-    // Tension 0.5 = Catmull-Rom estándar
+    // Tension 0.5 = standard Catmull-Rom
     let m = (1.0 - tension) * (b - a);
 
     let h1 = 2.0 * t3 - 3.0 * t2 + 1.0;

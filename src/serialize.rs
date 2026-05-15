@@ -26,7 +26,7 @@ impl Puppet {
     }
 
     pub fn write_to<W: Write>(&self, w: &mut W) -> std::io::Result<()> {
-        // Arma un Json donde se escribe todo, preservando el formato de floats
+        // Build a JSON where everything is written, preserving float format
         let mut json_buf = Vec::new();
         {
             let mut jw = JsonWriter::new(&mut json_buf);
@@ -102,7 +102,7 @@ impl<'w, W: Write> JsonWriter<'w, W> {
 
     fn str_val(&mut self, s: &str) {
         self.raw("\"");
-        // Escape de caracteres especiales
+        // Escape special characters
         for c in s.chars() {
             match c {
                 '"' => self.raw("\\\""),
@@ -139,8 +139,8 @@ impl<'w, W: Write> JsonWriter<'w, W> {
         let _ = write!(self.w, "{}", v);
     }
 
-    /// Se debe formatear f32 conservando el .0 para números enteros y limitando la precisión
-    /// Esto puede ser lo mas cercano a mantener 55.0 a 55.0, 0.15 a 0.15
+    /// Format f32 keeping the .0 for integer values and limiting precision.
+    /// This is the closest we get to keeping 55.0 as 55.0, 0.15 as 0.15.
     fn f32_val(&mut self, v: f32) {
         if v.is_nan() {
             self.raw("0.0");
@@ -155,12 +155,12 @@ impl<'w, W: Write> JsonWriter<'w, W> {
             return;
         }
 
-        // Formato como f32 (no f64) to get natural representation
+        // Format as f32 (not f64) to get natural representation
         let s = format!("{}", v);
         if s.contains('.') || s.contains('e') || s.contains('E') {
             let _ = self.w.write_all(s.as_bytes());
         } else {
-            // Todo numero se le añade .0
+            // Append .0 to any integer number
             let _ = self.w.write_all(s.as_bytes());
             self.raw(".0");
         }
@@ -208,7 +208,7 @@ impl<'w, W: Write> JsonWriter<'w, W> {
         self.raw("]");
     }
 
-    /// Se escribe como string JSON literal(para BindingValues::Other y VendorData)
+    /// Writes as a literal JSON string (for BindingValues::Other and VendorData)
     fn json_value(&mut self, v: &json::JsonValue) {
         let s = json::stringify(v.clone());
         let _ = self.w.write_all(s.as_bytes());
@@ -713,7 +713,7 @@ impl FlatTransformValues {
 
 impl FlatDeformValues {
     fn write_json_shaped<W: Write>(&self, j: &mut JsonWriter<W>, x_count: usize, y_count: usize) {
-        // Distribucion de datos de FlatDeformValues:
+        // FlatDeformValues data layout:
         //   frames = x_count
         //   vertices_per_frame = y_count * actual_vertex_count
         //   data[x * vpf + y * actual_vtx + v] = [dx, dy]
@@ -873,7 +873,7 @@ fn write_mesh<W: Write>(j: &mut JsonWriter<W>, mesh: Option<&Mesh>) {
             j.end_obj();
         }
         None => {
-            // coincidencia con el formato original: {"verts":[],"indices":null,"origin":[0.0,0.0]}
+            // Matches original format: {"verts":[],"indices":null,"origin":[0.0,0.0]}
             j.begin_obj();
             j.key("verts");
             j.begin_arr();

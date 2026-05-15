@@ -1,37 +1,37 @@
 ## ✦ Inochi2D Parser
 
-Parser tipado y representación intermedia (IR) del formato **Inochi2D** para archivos **INP / INX**, escrito en **Rust**.
+Typed parser and intermediate representation (IR) of the **Inochi2D** format for **INP / INX** files, written in **Rust**.
 
-Este crate transforma archivos JSON de Inochi2D en **estructuras Rust seguras, tipadas y listas para consumo**.
+This crate transforms Inochi2D JSON files into **safe, typed Rust structures ready for consumption**.
 
 ---
 
-## ✦ Características
+## ✦ Features
 
-Soporte para los principales bloques del formato:
+Support for the main blocks of the format:
 
 ✦ Puppet  
-✦ Nodos  
-✦ Parámetros  
-✦ Animación  
-✦ Grupos  
-✦ Extensiones de Vendor  
+✦ Nodes  
+✦ Parameters  
+✦ Animation  
+✦ Groups  
+✦ Vendor Extensions  
 
-Cada sección se convierte en **tipos de dominio claros**, evitando acceso directo a JSON crudo.
-
----
-
-## ✦ Características no implementadas
-
-Actualmente fuera de mi alcance:
-
-✦ Automatización
-
-_(Estas capas están pensadas para un runtime o sistema de playback separado)_
+Each section becomes **clear domain types**, avoiding direct access to raw JSON.
 
 ---
 
-## ✦ Ejemplo de uso
+## ✦ Unimplemented Features
+
+Currently out of scope:
+
+✦ Automation
+
+_(These layers are intended for a separate runtime or playback system)_
+
+---
+
+## ✦ Usage Example
 
 ```toml
 [dependencies]
@@ -44,13 +44,13 @@ use inochi2d_parser::Puppet;
 fn main() -> std::io::Result<()> {
     let puppet = Puppet::open("path/to/file.inp")?;
 
-    // Nodo raíz
+    // Root node
     let root_node = &puppet.nodes;
 
-    // Primer nodo hijo
+    // First child node
     let child_node = root_node.children.get(0).unwrap();
 
-    // Primer parámetro global
+    // First global parameter
     let root_param = puppet.params.get(0).unwrap();
 
     Ok(())
