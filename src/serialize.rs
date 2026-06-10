@@ -31,6 +31,7 @@ impl Puppet {
         {
             let mut jw = JsonWriter::new(&mut json_buf);
             self.write_json(&mut jw);
+            jw.finish()?;
         }
 
         // Header
@@ -79,15 +80,34 @@ impl Puppet {
 
 struct JsonWriter<'w, W: Write> {
     w: &'w mut W,
+    /// First write error, if any. Checked once at the end so the
+    /// per-value writer methods stay infallible at the call sites.
+    err: Option<std::io::Error>,
 }
 
 impl<'w, W: Write> JsonWriter<'w, W> {
     fn new(w: &'w mut W) -> Self {
-        Self { w }
+        Self { w, err: None }
+    }
+
+    fn write_bytes(&mut self, bytes: &[u8]) {
+        if self.err.is_some() {
+            return;
+        }
+        if let Err(e) = self.w.write_all(bytes) {
+            self.err = Some(e);
+        }
     }
 
     fn raw(&mut self, s: &str) {
-        let _ = self.w.write_all(s.as_bytes());
+        self.write_bytes(s.as_bytes());
+    }
+
+    fn finish(self) -> std::io::Result<()> {
+        match self.err {
+            Some(e) => Err(e),
+            None => Ok(()),
+        }
     }
 
     fn comma(&mut self) {
@@ -111,12 +131,12 @@ impl<'w, W: Write> JsonWriter<'w, W> {
                 '\r' => self.raw("\\r"),
                 '\t' => self.raw("\\t"),
                 c if (c as u32) < 0x20 => {
-                    let _ = write!(self.w, "\\u{:04x}", c as u32);
+                    self.raw(&format!("\\u{:04x}", c as u32));
                 }
                 c => {
                     let mut buf = [0u8; 4];
                     let s = c.encode_utf8(&mut buf);
-                    let _ = self.w.write_all(s.as_bytes());
+                    self.write_bytes(s.as_bytes());
                 }
             }
         }
@@ -132,11 +152,7 @@ impl<'w, W: Write> JsonWriter<'w, W> {
     }
 
     fn u32_val(&mut self, v: u32) {
-        let _ = write!(self.w, "{}", v);
-    }
-
-    fn _i32_val(&mut self, v: i32) {
-        let _ = write!(self.w, "{}", v);
+        self.raw(&v.to_string());
     }
 
     /// Format f32 keeping the .0 for integer values and limiting precision.
@@ -158,10 +174,10 @@ impl<'w, W: Write> JsonWriter<'w, W> {
         // Format as f32 (not f64) to get natural representation
         let s = format!("{}", v);
         if s.contains('.') || s.contains('e') || s.contains('E') {
-            let _ = self.w.write_all(s.as_bytes());
+            self.raw(&s);
         } else {
             // Append .0 to any integer number
-            let _ = self.w.write_all(s.as_bytes());
+            self.raw(&s);
             self.raw(".0");
         }
     }
@@ -211,7 +227,7 @@ impl<'w, W: Write> JsonWriter<'w, W> {
     /// Writes as a literal JSON string (for BindingValues::Other and VendorData)
     fn json_value(&mut self, v: &json::JsonValue) {
         let s = json::stringify(v.clone());
-        let _ = self.w.write_all(s.as_bytes());
+        self.raw(&s);
     }
 }
 
@@ -234,7 +250,10 @@ impl Puppet {
         j.key("param");
 
         j.begin_arr();
-        for (i, p) in self.params.values().enumerate() {
+        // Sort by UUID so output is deterministic (params live in a HashMap)
+        let mut params: Vec<&Param> = self.params.values().collect();
+        params.sort_by_key(|p| p.uuid);
+        for (i, p) in params.iter().enumerate() {
             if i > 0 {
                 j.comma();
             }
@@ -267,12 +286,13 @@ impl Puppet {
 
     fn write_animations<W: Write>(&self, j: &mut JsonWriter<W>) {
         j.begin_obj();
-        let mut first = true;
-        for (name, anim) in &self.animations {
-            if !first {
+        // Sort by name so output is deterministic (animations live in a HashMap)
+        let mut anims: Vec<(&String, &Animation)> = self.animations.iter().collect();
+        anims.sort_by_key(|(name, _)| *name);
+        for (i, (name, anim)) in anims.iter().enumerate() {
+            if i > 0 {
                 j.comma();
             }
-            first = false;
             j.key(name);
             anim.write_json(j);
         }

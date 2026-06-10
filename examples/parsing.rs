@@ -8,7 +8,9 @@ fn main() -> std::io::Result<()> {
         .expect("\n ✦ Usage: parsing <.inx/.inp file>\n\n ✦ Example: parsing ArchChan.inx\n");
 
     let puppet = Puppet::open(path)?;
-
+    
+    let time = time.elapsed();
+    
     println!("\nMeta: {:#?}", puppet.meta);
 
     println!("\nNodes Hierarchy:");
@@ -21,12 +23,12 @@ fn main() -> std::io::Result<()> {
 
     // puppet.save(format!("{}_serialized.inx", path))?;
 
-    println!("\nDone: {:?}", time.elapsed());
+    println!("\nDone: {:?}", time);
     Ok(())
 }
 
 fn recursive_nodes(node: &Node, tab: &mut String) {
-    tab.push_str("-");
+    tab.push('-');
     println!(
         "{tab}Node {}: {:?} - uuid: {} - z_sort: {}",
         match &node.type_node {

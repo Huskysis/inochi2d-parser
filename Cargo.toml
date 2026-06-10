@@ -1,6 +1,6 @@
 [package]
 name = "inochi2d-parser"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 authors = ["Huskysis"]
 description = "Analizador tipificado y representación intermedia para archivos INP/INX de Inochi2D"
@@ -11,4 +11,4 @@ categories = ["parser-implementations", "game-development"]
 
 
 [dependencies]
-json = "0.12"
+json = "0.12.4"

@@ -21,10 +21,18 @@ fn read_be_u32<R: Read>(data: &mut R) -> std::io::Result<u32> {
     Ok(u32::from_be_bytes(buf))
 }
 
+/// Reads `n` bytes growing the buffer incrementally, so a corrupt
+/// length field cannot trigger a huge upfront allocation.
 #[inline]
 fn read_vec<R: Read>(data: &mut R, n: usize) -> std::io::Result<Vec<u8>> {
-    let mut buf = vec![0_u8; n];
-    data.read_exact(&mut buf)?;
+    let mut buf = Vec::new();
+    data.take(n as u64).read_to_end(&mut buf)?;
+    if buf.len() != n {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::UnexpectedEof,
+            format!("expected {} bytes, got {}", n, buf.len()),
+        ));
+    }
     Ok(buf)
 }
 
@@ -46,7 +54,7 @@ pub struct Puppet {
 
     /// Parameter automation tracks (not implemented in this model).
     pub automation: Automation,
-    // pub automation: Vec<Automation>,
+
     /// Pre-recorded animation clips.
     pub animations: HashMap<String, Animation>,
 
@@ -97,7 +105,7 @@ impl Puppet {
         let values = json::parse(json_data)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
 
-        let mut puppet = Puppet::from_json(&values);
+        let mut puppet = Puppet::from_json(&values)?;
 
         // TEX_SECT
         let tex_magic = read_n::<_, 8>(reader)?;
@@ -162,12 +170,18 @@ impl Puppet {
         Ok(puppet)
     }
 
-    fn from_json(root: &json::JsonValue) -> Self {
-        let meta_v = root.get("meta").expect("missing 'meta'");
-        let physics_v = root.get("physics").expect("missing 'physics'");
-        let nodes_v = root.get("nodes").expect("missing 'nodes'");
+    fn from_json(root: &json::JsonValue) -> std::io::Result<Self> {
+        let missing = |field: &str| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("missing '{}' in puppet JSON", field),
+            )
+        };
+        let meta_v = root.get("meta").ok_or_else(|| missing("meta"))?;
+        let physics_v = root.get("physics").ok_or_else(|| missing("physics"))?;
+        let nodes_v = root.get("nodes").ok_or_else(|| missing("nodes"))?;
 
-        Self {
+        Ok(Self {
             meta: Meta::from_json(meta_v),
             physics: Physics::from_json(physics_v),
             nodes: Node::from_json(nodes_v),
@@ -177,7 +191,7 @@ impl Puppet {
             groups: parse_groups(root),
             textures: Vec::new(),
             vendors: Vec::new(),
-        }
+        })
     }
 }
 
@@ -283,6 +297,16 @@ pub struct Node {
 }
 
 impl Node {
+    /// Pre-order iterator over this node and all its descendants.
+    pub fn iter(&self) -> NodeIter<'_> {
+        NodeIter { stack: vec![self] }
+    }
+
+    /// Search the subtree (including `self`) for a node by UUID.
+    pub fn find_by_uuid(&self, uuid: u32) -> Option<&Node> {
+        self.iter().find(|n| n.uuid == uuid)
+    }
+
     fn from_json(v: &json::JsonValue) -> Self {
         let type_str = v.get_str("type").unwrap_or("generic");
         Self {
@@ -300,6 +324,21 @@ impl Node {
                 .map(Node::from_json)
                 .collect(),
         }
+    }
+}
+
+/// Pre-order iterator over a node tree. Created by [`Node::iter`].
+pub struct NodeIter<'a> {
+    stack: Vec<&'a Node>,
+}
+
+impl<'a> Iterator for NodeIter<'a> {
+    type Item = &'a Node;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let node = self.stack.pop()?;
+        self.stack.extend(node.children.iter().rev());
+        Some(node)
     }
 }
 
@@ -457,7 +496,6 @@ fn parse_mesh(v: &json::JsonValue) -> Option<Mesh> {
 pub struct MaskData {
     /// Geometry defining the mask shape.
     pub mesh: Option<Mesh>,
-    // pub mask_mode: MaskMode,
 }
 
 impl MaskData {
@@ -518,7 +556,6 @@ pub struct PartData {
     /// Multiple textures can be stacked (layers).
     ///
     /// Indices per texture slot: `[0] = Albedo, [1] = Emissive, [2] = BumpMap`
-    // pub textures: Vec<u32>,
     pub textures: [u32; 3],
 
     /// Blend mode (Normal, Multiply, Screen, etc).
@@ -553,7 +590,7 @@ impl PartData {
             mesh: parse_mesh(v),
             textures: [
                 textures_arr
-                    .get(0)
+                    .first()
                     .and_then(|t| t.as_u32())
                     .unwrap_or(u32::MAX),
                 textures_arr
@@ -811,6 +848,7 @@ pub enum BlendMode {
 }
 
 impl BlendMode {
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
             s if s.eq_ignore_ascii_case("normal") => Some(Self::Normal),
@@ -923,15 +961,15 @@ pub struct ParamBinding {
     /// Specific node property (TransformTX, Deform, Opacity, etc).
     pub param_name: ParamName,
 
-    /// Keyframe values for each frame.
-    /// Interpolated between frames according to `interpolate_mode`.
+    /// Values sampled over the parameter's axis-point grid.
+    /// Interpolated between grid points according to `interpolate_mode`.
     pub values: BindingValues,
 
-    /// Mask of "active" frames (for partial animations).
-    /// Structure: [frame][vertex_index] = true if keyframe exists.
+    /// Grid of explicitly set points: [x_axis_point][y_axis_point] = true
+    /// if the value was authored (false = interpolated by the runtime).
     pub is_set: Vec<Vec<bool>>,
 
-    /// Interpolation type between keyframes (Nearest or Linear).
+    /// Interpolation type between grid points.
     pub interpolate_mode: Interpolation,
 }
 
@@ -1048,17 +1086,19 @@ pub enum BindingValues {
     Other(json::JsonValue),
 }
 
-/// Efficient storage of transform keyframes.
-/// Deserialized from `Vec<Vec<f32>>` but stored flat.
+/// Efficient storage of scalar binding values.
+/// Deserialized from `Vec<Vec<f32>>` (parameter axis-point grid [x][y])
+/// but stored flat. `frames` = points on the X axis,
+/// `values_per_frame` = points on the Y axis (1 for non-vec2 params).
 #[derive(Debug, Clone)]
 pub struct FlatTransformValues {
-    /// Flat data buffer: [frame0_val0, frame0_val1, ..., frame1_val0, ...]
+    /// Flat data buffer: [x0_y0, x0_y1, ..., x1_y0, ...]
     pub data: Vec<f32>,
 
-    /// Number of frames in the animation.
+    /// Number of points on the X axis (outer array length).
     pub frames: usize,
 
-    /// Number of values per frame (typically 1, sometimes more).
+    /// Number of points on the Y axis (inner array length).
     pub values_per_frame: usize,
 }
 
@@ -1120,17 +1160,20 @@ impl FlatTransformValues {
     }
 }
 
-/// Efficient storage of deformation keyframes.
-/// Deserialized from `Vec<Vec<Vec<Vec<f32>>>>` but stored flat.
+/// Efficient storage of deformation binding values.
+/// Deserialized from `values[x][y][vertex] = [dx, dy]` but stored flat.
+/// `frames` = points on the X axis; `vertices_per_frame` flattens
+/// the Y axis together with the per-vertex offsets.
 #[derive(Debug, Clone)]
 pub struct FlatDeformValues {
-    /// Flat float buffer: [f0_v0_xy, f0_v1_xy, ..., f1_v0_xy, ...]
+    /// Flat offset buffer: [x0_v0, x0_v1, ..., x1_v0, ...]
     pub data: Vec<[f32; 2]>,
 
-    /// Number of frames.
+    /// Number of points on the X axis (outer array length).
     pub frames: usize,
 
-    /// Number of vertices per frame.
+    /// Number of [dx, dy] entries per X-axis point
+    /// (Y-axis points × vertex count).
     pub vertices_per_frame: usize,
 }
 
@@ -1152,7 +1195,7 @@ impl FlatDeformValues {
                             .iter()
                             .filter_map(|coords| {
                                 let pair = coords.as_array()?;
-                                Some([pair.get(0)?.as_f32()?, pair.get(1)?.as_f32()?])
+                                Some([pair.first()?.as_f32()?, pair.get(1)?.as_f32()?])
                             })
                     })
                     .collect()
@@ -1247,8 +1290,7 @@ pub enum Interpolation {
     /// Jumps to previous keyframe value (no smoothing).
     Stepped,
 
-    /// Alias of Stepped (Inochi2D compatibility).
-    /// Rounds to the nearest frame (no smoothing).
+    /// Rounds to the nearest keyframe value (no smoothing).
     Nearest,
 
     /// Smooth cubic interpolation (uses tension).
@@ -1261,7 +1303,7 @@ fn parse_interpolation(s: Option<&str>) -> Interpolation {
         Some(s) if s.eq_ignore_ascii_case("nearest") => Interpolation::Nearest,
         Some(s) if s.eq_ignore_ascii_case("cubic") => Interpolation::Cubic,
         Some(s) if s.eq_ignore_ascii_case("linear") => Interpolation::Linear,
-        _ => Interpolation::Nearest,
+        _ => Interpolation::Linear,
     }
 }
 
@@ -1398,7 +1440,14 @@ impl AnimationLane {
         let t = (frame - prev.frame as f32) / (next.frame as f32 - prev.frame as f32);
 
         match self.interpolation {
-            Interpolation::Stepped | Interpolation::Nearest => prev.value,
+            Interpolation::Stepped => prev.value,
+            Interpolation::Nearest => {
+                if t < 0.5 {
+                    prev.value
+                } else {
+                    next.value
+                }
+            }
             Interpolation::Linear => lerp(prev.value, next.value, t),
             Interpolation::Cubic => {
                 // Catmull-Rom with tension
@@ -1483,10 +1532,11 @@ pub struct VendorData {
 }
 
 /// Supported texture formats.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum TextureFormat {
     /// PNG format (lossless, with alpha channel).
+    #[default]
     Png = 0,
     /// TGA format (lossless).
     Tga = 1,
@@ -1557,12 +1607,6 @@ impl TextureFormat {
                 Ok((0, 0))
             }
         }
-    }
-}
-
-impl Default for TextureFormat {
-    fn default() -> Self {
-        Self::Png
     }
 }
 
