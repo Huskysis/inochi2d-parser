@@ -38,7 +38,7 @@ fn read_vec<R: Read>(data: &mut R, n: usize) -> std::io::Result<Vec<u8>> {
 
 /// Root structure of the Inochi2D puppet model.
 /// Contains metadata, physics, node tree, animation parameters and visual organization.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Puppet {
     /// Creator, version and rights information.
     pub meta: Meta,
@@ -196,7 +196,7 @@ impl Puppet {
 }
 
 /// Puppet metadata (creator, version, rights, contact).
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Meta {
     /// Descriptive name of the puppet.
     pub name: Option<String>,
@@ -250,7 +250,7 @@ impl Meta {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Physics {
     pub pixels_per_meter: f32,
     pub gravity: f32,
@@ -267,7 +267,7 @@ impl Physics {
 
 /// Node in the puppet's hierarchical tree.
 /// Can be visual (Part, Camera) or container (Composite, MeshGroup).
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct Node {
     /// Global unique identifier of the node.
     pub uuid: u32,
@@ -373,7 +373,7 @@ impl Transform {
 }
 
 /// Supported node types in the tree.
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub enum NodeDataType {
     /// Visual node with mesh and textures (face, limbs, etc).
     Part(PartData),
@@ -492,7 +492,7 @@ fn parse_mesh(v: &json::JsonValue) -> Option<Mesh> {
 }
 
 /// Mask node data (defines clipping region).
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct MaskData {
     /// Geometry defining the mask shape.
     pub mesh: Option<Mesh>,
@@ -546,7 +546,7 @@ fn parse_masks(v: &json::JsonValue) -> Vec<Mask> {
 }
 
 /// Data for a visual node (renderable mesh with textures).
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct PartData {
     /// Node geometry (vertices, indices, UVs, origin).
     pub mesh: Option<Mesh>,
@@ -616,7 +616,7 @@ impl PartData {
 }
 
 /// Camera node data (defines visible region).
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct CameraData {
     /// Viewport in pixels (width, height).
     /// Defines the visible render area.
@@ -633,7 +633,7 @@ impl CameraData {
 
 /// Node data with physics simulation.
 /// Simulates behavior of chains/tails/accessories.
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct SimplePhysicsData {
     /// UUID of the parameter controlling the physics output.
     pub param: u32,
@@ -722,7 +722,7 @@ pub enum PhysicsMapMode {
 }
 
 /// Visual container data (groups nodes with shared properties).
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct CompositeData {
     /// Blend mode for the entire group.
     pub blend_mode: BlendMode,
@@ -762,7 +762,7 @@ impl CompositeData {
 }
 
 /// Mesh group data (enables dynamic deformation).
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct MeshGroupData {
     /// Group geometry (can be deformed by parameters).
     pub mesh: Option<Mesh>,
@@ -875,7 +875,7 @@ impl BlendMode {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Param {
     /// Parent node UUID (hierarchical parameter organization).
     pub parent_uuid: Option<u32>,
@@ -1309,7 +1309,7 @@ fn parse_interpolation(s: Option<&str>) -> Interpolation {
 
 /// Automation track (placeholder struct).
 /// Not implemented in this model, pending definition.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Automation {}
 
 /// Pre-recorded animation clip.
@@ -1498,7 +1498,7 @@ fn parse_keyframes(v: &json::JsonValue) -> Vec<Keyframe> {
 
 /// Node group for visual organization in editor.
 /// The "folders" you see in the UI, for easier navigation.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Group {
     /// Unique group UUID.
     pub group_uuid: u32,
