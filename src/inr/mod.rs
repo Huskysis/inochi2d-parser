@@ -337,6 +337,75 @@ impl InrModel {
     }
 }
 
+// --- texture helpers -------------------------------------------------------
+
+/// Convert premultiplied RGBA8 to straight alpha in place, in the texture's
+/// own color space. Rounds with `(c * 255 + a/2) / a` so opaque texels are
+/// untouched. Use together with [`dilate_edges`] when preparing textures for
+/// engines that expect straight alpha (Bevy, Unity, Unreal, Godot).
+pub fn unpremultiply(rgba: &mut [u8]) {
+    for px in rgba.chunks_exact_mut(4) {
+        let a = px[3] as u32;
+        if a > 0 && a < 255 {
+            for c in &mut px[..3] {
+                *c = ((*c as u32 * 255 + a / 2) / a).min(255) as u8;
+            }
+        }
+    }
+}
+
+/// Flood color from opaque texels into fully transparent neighbours (4
+/// passes, 4-neighbour average). Straight-alpha RGB is undefined where
+/// a == 0; without dilation, bilinear filtering blends edge texels toward
+/// black, causing dark fringes.
+pub fn dilate_edges(width: usize, height: usize, rgba: &mut [u8]) {
+    let mut filled: Vec<bool> = rgba.chunks_exact(4).map(|p| p[3] != 0).collect();
+    for _ in 0..4 {
+        let prev = filled.clone();
+        let mut changed = false;
+        for y in 0..height {
+            for x in 0..width {
+                let i = y * width + x;
+                if prev[i] {
+                    continue;
+                }
+                let mut sum = [0u32; 3];
+                let mut n = 0u32;
+                let mut visit = |j: usize| {
+                    if prev[j] {
+                        for c in 0..3 {
+                            sum[c] += rgba[j * 4 + c] as u32;
+                        }
+                        n += 1;
+                    }
+                };
+                if x > 0 {
+                    visit(i - 1);
+                }
+                if x + 1 < width {
+                    visit(i + 1);
+                }
+                if y > 0 {
+                    visit(i - width);
+                }
+                if y + 1 < height {
+                    visit(i + width);
+                }
+                if n > 0 {
+                    for c in 0..3 {
+                        rgba[i * 4 + c] = (sum[c] / n) as u8;
+                    }
+                    filled[i] = true;
+                    changed = true;
+                }
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+}
+
 // --- JSON schema (unknown fields are ignored for forward compat) ----------
 
 #[derive(Debug, Serialize, Deserialize)]

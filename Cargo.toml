@@ -1,9 +1,9 @@
 [package]
 name = "inochi2d-parser"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 authors = ["Huskysis"]
-description = "Analizador tipificado y representación intermedia para archivos INP/INX de Inochi2D"
+description = "Typed parser and intermediate representation for Inochi2D INP/INX files"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/Huskysis/inochi2d-parser"
 keywords = ["inochi2d", "parser", "gamedev", "graphics"]
