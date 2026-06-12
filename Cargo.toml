@@ -1,6 +1,6 @@
 [package]
 name = "inochi2d-parser"
-version = "0.1.2"
+version = "0.2.0"
 edition = "2024"
 authors = ["Huskysis"]
 description = "Analizador tipificado y representación intermedia para archivos INP/INX de Inochi2D"
@@ -12,3 +12,20 @@ categories = ["parser-implementations", "game-development"]
 
 [dependencies]
 json = "0.12.4"
+serde = { version = "1.0.228", features = ["derive"], optional = true }
+serde_json = { version = "1.0.150", optional = true }
+bytemuck = { version = "1.25.0", features = ["extern_crate_alloc"], optional = true }
+image = { version = "0.25.10", optional = true, default-features = false, features = ["png", "tga"] }
+
+[dev-dependencies]
+image = { version = "0.25.10", default-features = false, features = ["png", "tga"] }
+
+[features]
+# INR container reading (typed doc + buffer views). Light deps.
+inr = ["dep:serde", "dep:serde_json", "dep:bytemuck"]
+# INR export from the parsed IR (texture decode via `image`).
+inr-export = ["inr", "dep:image"]
+
+[[example]]
+name = "inx2inr"
+required-features = ["inr-export"]

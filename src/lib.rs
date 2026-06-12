@@ -1,3 +1,5 @@
+#[cfg(feature = "inr")]
+pub mod inr;
 pub mod json_extra;
 pub mod owned;
 pub mod serialize;
