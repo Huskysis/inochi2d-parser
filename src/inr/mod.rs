@@ -424,6 +424,13 @@ pub struct InrDoc {
     pub params: Vec<InrParam>,
     #[serde(default)]
     pub animations: Vec<InrAnimation>,
+    /// Baked alpha silhouettes for parts referenced as mask sources. Keyed by
+    /// node uuid; value is the list of outer CCW polygons in UV space (0..1).
+    /// Renderers use these as the source contour for CPU mask clipping instead
+    /// of the source mesh triangles (the mesh is usually a loose quad around
+    /// the visible texture).
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub mask_contours: std::collections::BTreeMap<u32, Vec<Vec<[f32; 2]>>>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -544,6 +551,25 @@ pub struct InrComposite {
     pub mask_threshold: f32,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub masks: Vec<InrMask>,
+    /// Geometry-analysis result baked by the exporter (absent for identity
+    /// composites and files written by older exporters).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compose_hint: Option<InrComposeHint>,
+}
+
+/// How a renderer may realise a non-identity composite without offscreen
+/// compositing. Baked by the exporter from a conservative overlap analysis of
+/// the composite's child geometry across authored param samples (see
+/// `export::bake_compose_hints`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InrComposeHint {
+    /// Children proven pairwise disjoint at every sampled pose — the group
+    /// blend/opacity can be applied per child with identical results.
+    ChildrenDisjoint,
+    /// Children overlap at some pose, or the analysis was inconclusive —
+    /// correct rendering needs real offscreen compositing.
+    ChildrenOverlap,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

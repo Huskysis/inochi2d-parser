@@ -38,6 +38,7 @@ fn sample_doc() -> (InrDoc, Vec<u8>) {
         }],
         params: vec![],
         animations: vec![],
+        mask_contours: Default::default(),
     };
     (doc, bin)
 }
