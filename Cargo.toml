@@ -29,3 +29,7 @@ inr-export = ["inr", "dep:image"]
 [[example]]
 name = "inx2inr"
 required-features = ["inr-export"]
+
+[[example]]
+name = "diagnose_mask_contour"
+required-features = ["inr-export"]

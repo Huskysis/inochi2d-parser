@@ -1,6 +1,6 @@
 //! Export a parsed Inochi2D puppet to the INR container.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use crate::owned::{
     BindingValues, BlendMode, Interpolation, Mask, MaskMode, MergeMode, Mesh, Node, NodeDataType,
@@ -524,13 +524,24 @@ fn qkey(p: [f32; 2]) -> (i64, i64) {
 /// space (origin at image top-left, y down). Outer contours and hole
 /// contours both come out; `drop_holes` filters the holes afterward.
 fn marching_squares_alpha(rgba: &[u8], w: u32, h: u32, threshold: u8) -> Vec<Vec<[f32; 2]>> {
-    use std::collections::BTreeMap;
-
     if w < 2 || h < 2 {
         return Vec::new();
     }
 
-    let alpha = |x: u32, y: u32| -> u8 { rgba[((y * w + x) * 4 + 3) as usize] };
+    // Alpha is 0 outside the image bounds — a virtual transparent border.
+    // Without it, shapes that touch the texture edge (common: art painted
+    // flush to the UV island) leave an open isoline: marching squares never
+    // emits the closing segments along that edge, and the chain-walk breaks
+    // there, corrupting the contour. Iterating one extra cell ring around
+    // the image (x,y from -1..=w/h) lets those edge-touching shapes close
+    // naturally against the synthetic zero border.
+    let alpha = |x: i64, y: i64| -> u8 {
+        if x < 0 || y < 0 || x >= w as i64 || y >= h as i64 {
+            0
+        } else {
+            rgba[((y as u32 * w + x as u32) * 4 + 3) as usize]
+        }
+    };
     let interp = |a: u8, b: u8| -> f32 {
         // Linear crossing of `threshold` between two corner alpha values.
         let (af, bf, tf) = (a as f32, b as f32, threshold as f32);
@@ -543,8 +554,8 @@ fn marching_squares_alpha(rgba: &[u8], w: u32, h: u32, threshold: u8) -> Vec<Vec
 
     // segments: list of (start, end) line segments.
     let mut segments: Vec<([f32; 2], [f32; 2])> = Vec::new();
-    for y in 0..h - 1 {
-        for x in 0..w - 1 {
+    for y in -1..h as i64 {
+        for x in -1..w as i64 {
             let (tl, tr) = (alpha(x, y), alpha(x + 1, y));
             let (bl, br) = (alpha(x, y + 1), alpha(x + 1, y + 1));
             let bit = |a: u8| if a >= threshold { 1u8 } else { 0u8 };
@@ -601,9 +612,14 @@ fn marching_squares_alpha(rgba: &[u8], w: u32, h: u32, threshold: u8) -> Vec<Vec
         }
     }
 
-    // Chain segments into closed loops. Multiple segments can start at the
-    // same point (the corner shared by 4 cells), so the index is a Vec —
-    // pick the first unused match when walking.
+    chain_segments(segments)
+}
+
+/// Chain oriented segments into closed loops by matching each segment's end
+/// point to another segment's start point at the same location. Multiple
+/// segments can start at the same point (the corner shared by 4 cells), so
+/// the index is a `Vec` — pick the first unused match when walking.
+fn chain_segments(segments: Vec<([f32; 2], [f32; 2])>) -> Vec<Vec<[f32; 2]>> {
     let mut by_start: BTreeMap<(i64, i64), Vec<usize>> = BTreeMap::new();
     for (i, seg) in segments.iter().enumerate() {
         by_start.entry(qkey(seg.0)).or_default().push(i);
@@ -627,10 +643,19 @@ fn marching_squares_alpha(rgba: &[u8], w: u32, h: u32, threshold: u8) -> Vec<Vec
             let next = by_start
                 .get(&next_key)
                 .and_then(|cands| cands.iter().copied().find(|&n| !used[n]));
+            #[cfg(test)]
+            if let Some(cands) = by_start.get(&next_key) {
+                let unused: Vec<usize> = cands.iter().copied().filter(|&n| !used[n]).collect();
+                if unused.len() > 1 {
+                    diag_hooks::note_ambiguous(segments[cur].1, unused.len());
+                }
+            }
             match next {
                 Some(next) => cur = next,
                 None => {
                     poly.push(segments[cur].1);
+                    #[cfg(test)]
+                    diag_hooks::note_break(segments[cur].1);
                     break;
                 }
             }
@@ -640,6 +665,36 @@ fn marching_squares_alpha(rgba: &[u8], w: u32, h: u32, threshold: u8) -> Vec<Vec
         }
     }
     polygons
+}
+
+#[cfg(test)]
+mod diag_hooks {
+    //! Tracing sinks for `diag_tests::diag_back_hoodie` — flag chain breaks
+    //! and ambiguous branch points during chaining. No-ops unless a break
+    //! falls in the watched region; keeps normal test output quiet.
+    use std::cell::RefCell;
+
+    type Ambiguous = ([f32; 2], usize);
+
+    thread_local! {
+        static BREAKS: RefCell<Vec<[f32; 2]>> = const { RefCell::new(Vec::new()) };
+        static AMBIGUOUS: RefCell<Vec<Ambiguous>> = const { RefCell::new(Vec::new()) };
+    }
+
+    pub(super) fn note_break(p: [f32; 2]) {
+        BREAKS.with(|b| b.borrow_mut().push(p));
+    }
+
+    pub(super) fn note_ambiguous(p: [f32; 2], candidates: usize) {
+        AMBIGUOUS.with(|a| a.borrow_mut().push((p, candidates)));
+    }
+
+    pub(super) fn drain() -> (Vec<[f32; 2]>, Vec<Ambiguous>) {
+        (
+            BREAKS.with(|b| std::mem::take(&mut *b.borrow_mut())),
+            AMBIGUOUS.with(|a| std::mem::take(&mut *a.borrow_mut())),
+        )
+    }
 }
 
 /// Drops polygons whose centroid lies inside another, larger polygon —
@@ -1199,4 +1254,123 @@ fn has_separating_axis(a: &[[f32; 2]; 3], b: &[[f32; 2]; 3]) -> bool {
         }
     }
     false
+}
+
+#[cfg(test)]
+mod diag_tests {
+    //! Temporary instrumentation for the Back Hoodie contour bug
+    //! (2026-07-03). Run manually: `cargo test --features inr,inr-export
+    //! diag_back_hoodie -- --ignored --nocapture`. Not part of CI — depends
+    //! on an asset path outside this repo. Remove once the fix lands.
+    use super::*;
+
+    #[test]
+    #[ignore]
+    fn diag_back_hoodie() {
+        let path = "/home/husky/Rust/dev-bevy_inochi2d/assets/Arch Chan.inr";
+        let model = crate::inr::InrModel::open(path).expect("open inr");
+        let node = model
+            .doc
+            .nodes
+            .iter()
+            .find(|n| n.name == "Back Hoodie")
+            .expect("part not found");
+        let part = node.part.as_ref().expect("no part");
+        let tex = &model.doc.textures[part.textures[0] as usize];
+        let raw = model.view_bytes(tex.view).expect("view bytes");
+        let (w, h) = (tex.width, tex.height);
+
+        let raw_threshold = 128u8;
+        let contours = marching_squares_alpha(raw, w, h, raw_threshold);
+
+        let (breaks, ambiguous) = diag_hooks::drain();
+        println!(
+            "chain breaks: {} total, in x=[470..670]: {}",
+            breaks.len(),
+            breaks.iter().filter(|p| p[0] >= 470.0 && p[0] <= 670.0).count()
+        );
+        for p in breaks.iter().filter(|p| p[0] >= 470.0 && p[0] <= 670.0) {
+            println!("  break at ({:.2}, {:.2}) u=({:.4}, {:.4})", p[0], p[1], p[0] / w as f32, p[1] / h as f32);
+        }
+        println!(
+            "ambiguous branch points: {} total, in x=[470..670]: {}",
+            ambiguous.len(),
+            ambiguous.iter().filter(|(p, _)| p[0] >= 470.0 && p[0] <= 670.0).count()
+        );
+        for (p, n) in ambiguous.iter().filter(|(p, _)| p[0] >= 470.0 && p[0] <= 670.0) {
+            println!("  ambiguous at ({:.2}, {:.2}) candidates={n}", p[0], p[1]);
+        }
+
+        println!("raw marching-squares polygons: {}", contours.len());
+        for (i, c) in contours.iter().enumerate() {
+            let area = signed_area(c).abs();
+            let xs = c.iter().map(|p| p[0]).fold(f32::INFINITY, f32::min)
+                ..c.iter().map(|p| p[0]).fold(f32::NEG_INFINITY, f32::max);
+            println!(
+                "  raw[{i}] pts={} area={:.1} x=[{:.1}..{:.1}] (u=[{:.4}..{:.4}])",
+                c.len(),
+                area,
+                xs.start,
+                xs.end,
+                xs.start / w as f32,
+                xs.end / w as f32,
+            );
+        }
+
+        let big: Vec<Vec<[f32; 2]>> = contours
+            .into_iter()
+            .filter(|c| signed_area(c).abs() >= 4.0)
+            .collect();
+        println!("after area>=4.0 filter: {}", big.len());
+
+        let outers = drop_holes(big);
+        println!("after drop_holes: {}", outers.len());
+        for (i, c) in outers.iter().enumerate() {
+            let xs = c.iter().map(|p| p[0]).fold(f32::INFINITY, f32::min)
+                ..c.iter().map(|p| p[0]).fold(f32::NEG_INFINITY, f32::max);
+            println!(
+                "  outer[{i}] pts={} x=[{:.1}..{:.1}] (u=[{:.4}..{:.4}])",
+                c.len(),
+                xs.start,
+                xs.end,
+                xs.start / w as f32,
+                xs.end / w as f32,
+            );
+        }
+
+        let simplified: Vec<Vec<[f32; 2]>> = outers
+            .into_iter()
+            .map(|c| douglas_peucker(&c, 1.0))
+            .filter(|c| c.len() >= 3)
+            .collect();
+        let mut img = image::RgbaImage::from_raw(w, h, raw.to_vec()).expect("build image");
+        for p in &simplified {
+            for i in 0..p.len() {
+                let a = p[i];
+                let b = p[(i + 1) % p.len()];
+                draw_line_diag(&mut img, a[0], a[1], b[0], b[1]);
+            }
+        }
+        img.save("/tmp/back_hoodie_overlay_fixed2.png").expect("save png");
+        println!("fixed overlay written to /tmp/back_hoodie_overlay_fixed2.png");
+    }
+
+    fn draw_line_diag(img: &mut image::RgbaImage, x0: f32, y0: f32, x1: f32, y1: f32) {
+        let steps = (x1 - x0).abs().max((y1 - y0).abs()).ceil() as i32 + 1;
+        let (w, h) = img.dimensions();
+        for i in 0..=steps {
+            let t = i as f32 / steps as f32;
+            let x = (x0 + (x1 - x0) * t).round() as i64;
+            let y = (y0 + (y1 - y0) * t).round() as i64;
+            for dx in -1..=1 {
+                for dy in -1..=1 {
+                    let px = x + dx;
+                    let py = y + dy;
+                    if px >= 0 && py >= 0 && (px as u32) < w && (py as u32) < h {
+                        img.put_pixel(px as u32, py as u32, image::Rgba([255, 0, 0, 255]));
+                    }
+                }
+            }
+        }
+    }
 }
