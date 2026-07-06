@@ -1,6 +1,6 @@
 [package]
 name = "inochi2d-parser"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2024"
 authors = ["Huskysis"]
 description = "Typed parser and intermediate representation for Inochi2D INP/INX files"
