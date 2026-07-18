@@ -54,11 +54,11 @@ Top-level object (`InrDoc`):
   "meta":         { /* name/artist/rights… optional strings */ },
   "physics":      { "pixels_per_meter": 1000.0, "gravity": 9.8 },
   "buffer_views": [ { "offset": 0, "length": 1024 }, … ],
-  "textures":     [ … ],
   "nodes":        [ … ],
   "params":       [ … ],
   "animations":   [ … ],
-  "mask_contours": { /* optional, see 3.6 */ }
+  "mask_contours": { /* optional, see 3.5 */ },
+  "textures":     [ … ]
 }
 ```
 
@@ -68,31 +68,7 @@ Top-level object (`InrDoc`):
 Offsets are always 4-aligned, so `f32`/`u32` payloads can be reinterpreted
 zero-copy (or memory-mapped).
 
-### 3.2 textures
-
-```jsonc
-{
-  "width": 1024, "height": 1024,
-  "format": "rgba8",          // pixel layout, row-major, no padding
-  "color_space": "srgb",      // "srgb" | "linear" (RGB channel encoding)
-  "premultiplied": false,     // RGB premultiplied by alpha, in color_space
-  "view": 3
-}
-```
-
-Inochi2D sources ship premultiplied sRGB PNG/TGA. The exporter converts
-them to **straight (un-premultiplied) alpha sRGB** and dilates edge colors
-into fully transparent texels, so files are always `"srgb"` +
-`premultiplied: false`. This is the texture convention engines like Bevy,
-Unity, Unreal and Godot expect: upload as an sRGB format (hardware decode),
-premultiply in-shader, blend in linear space. Edge dilation prevents dark
-fringes from bilinear filtering across transparent texels.
-
-Readers must still honor the declared `color_space`/`premultiplied` flags
-rather than assuming them, so other generators can store different
-conventions.
-
-### 3.3 nodes
+### 3.2 nodes
 
 ```jsonc
 {
@@ -174,7 +150,7 @@ must treat a missing hint as `"children_overlap"` (the safe fallback).
 }
 ```
 
-### 3.4 params
+### 3.3 params
 
 ```jsonc
 {
@@ -204,7 +180,7 @@ Binding:
 - `kind: "deform"` → view holds `[f32;2] * x_count * y_count * vertex_count`
   per-vertex offsets, grouped per X-axis point.
 
-### 3.5 animations
+### 3.4 animations
 
 Keyframes are small and stay inline:
 
@@ -222,7 +198,7 @@ Keyframes are small and stay inline:
 }
 ```
 
-### 3.6 mask_contours
+### 3.5 mask_contours
 
 Optional top-level map, omitted when empty. Keyed by **node uuid**
 (stringified in JSON); value is a list of outer **CCW polygons in UV
@@ -241,6 +217,30 @@ a loose quad around the visible texture and would over-clip.
 
 Readers that render masks on the GPU (stencil/alpha test) can ignore this
 map entirely.
+
+### 3.6 textures
+
+```jsonc
+{
+  "width": 1024, "height": 1024,
+  "format": "rgba8",          // pixel layout, row-major, no padding
+  "color_space": "srgb",      // "srgb" | "linear" (RGB channel encoding)
+  "premultiplied": false,     // RGB premultiplied by alpha, in color_space
+  "view": 3
+}
+```
+
+Inochi2D sources ship premultiplied sRGB PNG/TGA. The exporter converts
+them to **straight (un-premultiplied) alpha sRGB** and dilates edge colors
+into fully transparent texels, so files are always `"srgb"` +
+`premultiplied: false`. This is the texture convention engines like Bevy,
+Unity, Unreal and Godot expect: upload as an sRGB format (hardware decode),
+premultiply in-shader, blend in linear space. Edge dilation prevents dark
+fringes from bilinear filtering across transparent texels.
+
+Readers must still honor the declared `color_space`/`premultiplied` flags
+rather than assuming them, so other generators can store different
+conventions.
 
 ## 4. Versioning
 

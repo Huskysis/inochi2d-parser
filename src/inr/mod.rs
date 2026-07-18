@@ -416,8 +416,6 @@ pub struct InrDoc {
     pub meta: Meta,
     pub physics: Physics,
     pub buffer_views: Vec<BufferView>,
-    #[serde(default)]
-    pub textures: Vec<TextureDesc>,
     /// Flattened pre-order: a parent always precedes its children.
     pub nodes: Vec<InrNode>,
     #[serde(default)]
@@ -431,6 +429,8 @@ pub struct InrDoc {
     /// the visible texture).
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub mask_contours: std::collections::BTreeMap<u32, Vec<Vec<[f32; 2]>>>,
+    #[serde(default)]
+    pub textures: Vec<TextureDesc>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
