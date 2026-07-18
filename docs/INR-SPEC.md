@@ -57,7 +57,8 @@ Top-level object (`InrDoc`):
   "textures":     [ … ],
   "nodes":        [ … ],
   "params":       [ … ],
-  "animations":   [ … ]
+  "animations":   [ … ],
+  "mask_contours": { /* optional, see 3.6 */ }
 }
 ```
 
@@ -138,6 +139,28 @@ Final vertex position = `(position - origin + deform) * node world transform`.
 nodes render their subtree to an offscreen target and composite it back
 with their blend/opacity/tint.
 
+```jsonc
+{
+  "blend_mode": "normal",
+  "tint": [1,1,1], "screen_tint": [0,0,0],
+  "opacity": 1.0, "mask_threshold": 0.5,
+  "masks": [ … ],
+  "compose_hint": "children_disjoint"   // optional; | "children_overlap"
+}
+```
+
+`compose_hint` is baked by the exporter from a conservative overlap
+analysis of the composite's child geometry across authored param samples:
+
+- `"children_disjoint"` — children proven pairwise disjoint at every
+  sampled pose; the group blend/opacity may be applied per child with
+  identical results, skipping offscreen compositing.
+- `"children_overlap"` — children overlap at some pose, or the analysis
+  was inconclusive; correct rendering needs real offscreen compositing.
+
+Absent on identity composites and files from older exporters; readers
+must treat a missing hint as `"children_overlap"` (the safe fallback).
+
 `physics` (SimplePhysics):
 
 ```jsonc
@@ -198,6 +221,26 @@ Keyframes are small and stay inline:
   ]
 }
 ```
+
+### 3.6 mask_contours
+
+Optional top-level map, omitted when empty. Keyed by **node uuid**
+(stringified in JSON); value is a list of outer **CCW polygons in UV
+space** (`0..1`), each polygon a list of `[u, v]` points:
+
+```jsonc
+"mask_contours": {
+  "123456": [ [ [0.12, 0.30], [0.85, 0.31], … ] ]
+}
+```
+
+These are alpha silhouettes baked by the exporter for parts referenced as
+mask sources. Renderers doing CPU mask clipping should use them as the
+source contour instead of the source mesh triangles — the mesh is usually
+a loose quad around the visible texture and would over-clip.
+
+Readers that render masks on the GPU (stencil/alpha test) can ignore this
+map entirely.
 
 ## 4. Versioning
 
