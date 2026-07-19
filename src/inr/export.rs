@@ -488,7 +488,27 @@ fn bake_mask_contours(puppet: &Puppet) -> std::collections::BTreeMap<u32, Vec<Ve
         };
         let raw = (part.mask_threshold.clamp(0.0, 1.0) * 255.0) as u8;
         let threshold = if raw == 0 { 128 } else { raw };
-        let contours = marching_squares_alpha(&rgba, w, h, threshold);
+        // Restrict marching squares to the part's UV footprint (+2 texel
+        // margin). With atlased textures (INP) the image holds EVERY part's
+        // alpha; an unrestricted pass hands each mask source the silhouette
+        // of the whole page — wrong clip shapes and 100–200 polygons per
+        // source (found 2026-07-19, all four INP test models affected).
+        let rect = part
+            .mesh
+            .as_ref()
+            .and_then(|m| uv_pixel_rect(&m.uvs, w, h))
+            .unwrap_or((0, 0, w, h));
+        let (rx, ry, rw, rh) = rect;
+        let sub = crop_rgba(&rgba, w, rect);
+        let contours_local = marching_squares_alpha(&sub, rw, rh, threshold);
+        let contours: Vec<Vec<[f32; 2]>> = contours_local
+            .into_iter()
+            .map(|c| {
+                c.into_iter()
+                    .map(|p| [p[0] + rx as f32, p[1] + ry as f32])
+                    .collect()
+            })
+            .collect();
         // Drop sub-pixel noise (alias artifacts near alpha edges).
         let big: Vec<Vec<[f32; 2]>> = contours
             .into_iter()
@@ -508,6 +528,41 @@ fn bake_mask_contours(puppet: &Puppet) -> std::collections::BTreeMap<u32, Vec<Ve
         if !uv.is_empty() {
             out.insert(uuid, uv);
         }
+    }
+    out
+}
+
+/// Pixel rect (x, y, w, h) covering the mesh's UV bbox clamped to the
+/// texture, expanded by a 2-texel margin. `None` when the mesh has no UVs
+/// or the rect degenerates (< 2px per side after clamping).
+fn uv_pixel_rect(uvs: &[f32], w: u32, h: u32) -> Option<(u32, u32, u32, u32)> {
+    if uvs.len() < 2 {
+        return None;
+    }
+    let (mut u0, mut v0, mut u1, mut v1) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
+    for uv in uvs.chunks_exact(2) {
+        u0 = u0.min(uv[0]);
+        v0 = v0.min(uv[1]);
+        u1 = u1.max(uv[0]);
+        v1 = v1.max(uv[1]);
+    }
+    const MARGIN: i64 = 2;
+    let x0 = ((u0.clamp(0.0, 1.0) * w as f32).floor() as i64 - MARGIN).max(0) as u32;
+    let y0 = ((v0.clamp(0.0, 1.0) * h as f32).floor() as i64 - MARGIN).max(0) as u32;
+    let x1 = ((u1.clamp(0.0, 1.0) * w as f32).ceil() as i64 + MARGIN).min(w as i64) as u32;
+    let y1 = ((v1.clamp(0.0, 1.0) * h as f32).ceil() as i64 + MARGIN).min(h as i64) as u32;
+    if x1.saturating_sub(x0) < 2 || y1.saturating_sub(y0) < 2 {
+        return None;
+    }
+    Some((x0, y0, x1 - x0, y1 - y0))
+}
+
+/// Copy a sub-rect out of a tightly packed RGBA image.
+fn crop_rgba(rgba: &[u8], w: u32, (rx, ry, rw, rh): (u32, u32, u32, u32)) -> Vec<u8> {
+    let mut out = Vec::with_capacity((rw * rh * 4) as usize);
+    for row in ry..ry + rh {
+        let start = ((row * w + rx) * 4) as usize;
+        out.extend_from_slice(&rgba[start..start + (rw * 4) as usize]);
     }
     out
 }
