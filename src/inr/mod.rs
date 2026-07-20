@@ -33,7 +33,7 @@ pub use import::{open_puppet, to_puppet};
 #[cfg(feature = "inr-export")]
 mod export;
 #[cfg(feature = "inr-export")]
-pub use export::{export_puppet, export_to_file, write_container};
+pub use export::{convert_puppet, export_puppet, export_to_file, write_container};
 
 use serde::{Deserialize, Serialize};
 
@@ -505,6 +505,16 @@ pub struct InrNode {
     pub translation: [f32; 3],
     pub rotation: [f32; 3],
     pub scale: [f32; 2],
+    /// MeshGroup only: upstream `dynamic_deformation`. When true, the group
+    /// warps children at runtime from their deformed vertices (recompute +
+    /// replace); when false, it is a static rest-pose warp. Default false so
+    /// older INRs (no field) deserialize as static.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub mesh_group_dynamic: bool,
+    /// MeshGroup only: upstream `translate_children` — whether non-drawable
+    /// descendants are warped too. Default false.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub mesh_group_translate_children: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mesh: Option<InrMesh>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -555,6 +565,20 @@ pub struct InrComposite {
     /// composites and files written by older exporters).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compose_hint: Option<InrComposeHint>,
+    /// Upstream `propagateMeshGroup`: whether an ancestor MeshGroup's warp
+    /// crosses into this composite's children. When false, the composite is
+    /// a barrier — descendants are warped only by MeshGroups inside it.
+    /// Default true so older INRs (no field) keep propagating.
+    #[serde(default = "default_true", skip_serializing_if = "is_true")]
+    pub propagate_meshgroup: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn is_true(b: &bool) -> bool {
+    *b
 }
 
 /// How a renderer may realise a non-identity composite without offscreen

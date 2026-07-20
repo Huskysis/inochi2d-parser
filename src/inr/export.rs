@@ -28,6 +28,16 @@ pub fn write_container(doc: &InrDoc, bin: &[u8]) -> Result<Vec<u8>, InrError> {
 
 /// Convert a parsed puppet into INR bytes.
 pub fn export_puppet(puppet: &Puppet) -> Result<Vec<u8>, InrError> {
+    let (doc, bin) = convert_puppet(puppet)?;
+    write_container(&doc, &bin)
+}
+
+/// Convert a parsed puppet into the typed INR document + binary blob, without
+/// serializing to the on-disk container format. Lets a consumer build an
+/// `InrModel { doc, bin }` directly in memory (no JSON round-trip, no file) -
+/// e.g. loading `.inx`/`.inp` straight into an INR-shaped runtime without
+/// writing an `.inr` to disk first.
+pub fn convert_puppet(puppet: &Puppet) -> Result<(InrDoc, Vec<u8>), InrError> {
     let mut bin = BinWriter::default();
 
     // Pre-order walk: node index map first (masks/bindings reference indices)
@@ -146,7 +156,7 @@ pub fn export_puppet(puppet: &Puppet) -> Result<Vec<u8>, InrError> {
         mask_contours: bake_mask_contours(puppet),
     };
 
-    write_container(&doc, &bin.data)
+    Ok((doc, bin.data))
 }
 
 /// Export and write to a file.
@@ -215,6 +225,8 @@ fn build_node(
         translation: node.transform.translation,
         rotation: node.transform.rotation,
         scale: node.transform.scale,
+        mesh_group_dynamic: false,
+        mesh_group_translate_children: false,
         mesh: None,
         part: None,
         composite: None,
@@ -247,6 +259,8 @@ fn build_node(
                 masks: build_masks(&d.mask, node_index),
                 // Filled by the compose-hint post-pass in `export_puppet`.
                 compose_hint: None,
+                // Upstream default is true when the field is absent.
+                propagate_meshgroup: d.propagate_meshgroup.unwrap_or(true),
             });
         }
         T::Mask(d) => {
@@ -256,6 +270,8 @@ fn build_node(
         T::MeshGroup(d) => {
             out.kind = InrNodeKind::MeshGroup;
             out.mesh = d.mesh.as_ref().map(|m| build_mesh(m, bin));
+            out.mesh_group_dynamic = d.dynamic_deformation;
+            out.mesh_group_translate_children = d.translate_children;
         }
         T::SimplePhysics(d) => {
             out.kind = InrNodeKind::SimplePhysics;
@@ -970,6 +986,18 @@ fn bake_compose_hints(puppet: &Puppet) -> HashMap<u32, InrComposeHint> {
     out
 }
 
+/// Diagnostic-only: explains why `analyze_composite` classified a composite
+/// as `ChildrenOverlap` instead of the faster `ChildrenDisjoint` path. Debug
+/// builds only - this runs on every load of an .inx/.inp puppet (loaders
+/// convert through the same INR path this analysis is part of), so it'd be
+/// release-build console noise otherwise.
+macro_rules! hint_eprintln {
+    ($($arg:tt)*) => {
+        #[cfg(debug_assertions)]
+        eprintln!($($arg)*);
+    };
+}
+
 fn composite_is_identity(d: &crate::owned::CompositeData) -> bool {
     const EPS: f32 = 1e-6;
     matches!(d.blend_mode, BlendMode::Normal)
@@ -1032,13 +1060,13 @@ fn analyze_composite(composite: &Node, puppet: &Puppet) -> InrComposeHint {
                     // deform on an intermediate node (MeshGroup) warps the
                     // children through grid interpolation — not modelled.
                     if !part_uuids.contains(&b.node) {
-                        eprintln!("[hint/{}] doubt: deform on intermediate node {} (param '{}')", composite.name, b.node, param.name);
+                        hint_eprintln!("[hint/{}] doubt: deform on intermediate node {} (param '{}')", composite.name, b.node, param.name);
                         return ChildrenOverlap;
                     }
                     touches = true;
                 }
                 ParamName::TransformRX | ParamName::TransformRY | ParamName::Other(_) => {
-                    eprintln!("[hint/{}] doubt: unsupported binding {:?} on node {} (param '{}')", composite.name, b.param_name, b.node, param.name);
+                    hint_eprintln!("[hint/{}] doubt: unsupported binding {:?} on node {} (param '{}')", composite.name, b.param_name, b.node, param.name);
                     return ChildrenOverlap;
                 }
             }
@@ -1080,7 +1108,7 @@ fn analyze_composite(composite: &Node, puppet: &Puppet) -> InrComposeHint {
             .map(|c| child_world_vertices(c, pose))
             .collect();
         let Some(clouds) = clouds else {
-            eprintln!("[hint/{}] doubt: inconsistent binding data at pose {:?}", composite.name, pose.map(|(p,x,y)| (p.name.clone(),x,y)));
+            hint_eprintln!("[hint/{}] doubt: inconsistent binding data at pose {:?}", composite.name, pose.map(|(p,x,y)| (p.name.clone(),x,y)));
             return ChildrenOverlap; // inconsistent binding data = doubt
         };
         let boxes: Vec<([f32; 2], [f32; 2])> = clouds.iter().map(|c| aabb(c)).collect();
@@ -1095,7 +1123,7 @@ fn analyze_composite(composite: &Node, puppet: &Puppet) -> InrComposeHint {
                     &clouds[j],
                     &children[j].mesh.indices,
                 ) {
-                    eprintln!("[hint/{}] overlap: '{}' vs '{}' at pose {:?}", composite.name, children[i].chain.last().unwrap().name, children[j].chain.last().unwrap().name, pose.map(|(p,x,y)| (p.name.clone(),x,y)));
+                    hint_eprintln!("[hint/{}] overlap: '{}' vs '{}' at pose {:?}", composite.name, children[i].chain.last().unwrap().name, children[j].chain.last().unwrap().name, pose.map(|(p,x,y)| (p.name.clone(),x,y)));
                     return ChildrenOverlap;
                 }
             }
