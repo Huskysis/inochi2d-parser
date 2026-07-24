@@ -1,5 +1,5 @@
-//! Convert an INX/INP puppet to INR:
-//! `cargo run --features inr-export --example inx2inr -- in.inx [out.inr]`
+//! Convert an INX/INP puppet to INR: `cargo run --features inr-export --example
+//! inx2inr -- in.inx [out.inr]`
 
 use inochi2d_parser::inr;
 use inochi2d_parser::prelude::Puppet;
@@ -21,7 +21,7 @@ fn main() {
     let model = inr::InrModel::open(&output).expect("failed to re-read INR");
     let size = std::fs::metadata(&output).map(|m| m.len()).unwrap_or(0);
     println!(
-        "{output}: {size} bytes — {} nodes, {} params, {} animations, {} textures, {} buffer views",
+        "{output}: {size} bytes - {} nodes, {} params, {} animations, {} textures, {} buffer views",
         model.doc.nodes.len(),
         model.doc.params.len(),
         model.doc.animations.len(),

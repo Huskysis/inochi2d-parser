@@ -8,6 +8,7 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/Huskysis/inochi2d-parser"
 keywords = ["inochi2d", "parser", "gamedev", "graphics"]
 categories = ["parser-implementations", "game-development"]
+exclude = ["examples/inspect_*.rs", "examples/diagnose_*.rs"]
 
 
 [dependencies]
@@ -32,4 +33,80 @@ required-features = ["inr-export"]
 
 [[example]]
 name = "diagnose_mask_contour"
+required-features = ["inr-export"]
+
+[[example]]
+name = "inspect_animations"
+required-features = ["inr-export"]
+
+[[example]]
+name = "inspect_bindings"
+required-features = ["inr-export"]
+
+[[example]]
+name = "inspect_cameras"
+required-features = ["inr-export"]
+
+[[example]]
+name = "inspect_composites"
+required-features = ["inr-export"]
+
+[[example]]
+name = "inspect_contours"
+required-features = ["inr-export"]
+
+[[example]]
+name = "inspect_deform_all_frames"
+required-features = ["inr-export"]
+
+[[example]]
+name = "inspect_deform_binding"
+required-features = ["inr-export"]
+
+[[example]]
+name = "inspect_deform_shape"
+required-features = ["inr-export"]
+
+[[example]]
+name = "inspect_dense_deform_params"
+required-features = ["inr-export"]
+
+[[example]]
+name = "inspect_hair"
+required-features = ["inr-export"]
+
+[[example]]
+name = "inspect_is_set"
+required-features = ["inr-export"]
+
+[[example]]
+name = "inspect_light_deform_values"
+required-features = ["inr-export"]
+
+[[example]]
+name = "inspect_mask_contours"
+required-features = ["inr-export"]
+
+[[example]]
+name = "inspect_masks"
+required-features = ["inr-export"]
+
+[[example]]
+name = "inspect_mg"
+required-features = ["inr-export"]
+
+[[example]]
+name = "inspect_mg_flags"
+required-features = ["inr-export"]
+
+[[example]]
+name = "inspect_mouth"
+required-features = ["inr-export"]
+
+[[example]]
+name = "inspect_params"
+required-features = ["inr-export"]
+
+[[example]]
+name = "inspect_pm"
 required-features = ["inr-export"]

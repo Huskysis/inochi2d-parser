@@ -22,8 +22,8 @@ All integers are little-endian.
 | 4      | 4    | `u32` container version (currently `1`)  |
 | 8      | 4    | `u32` JSON chunk length (4-aligned)      |
 | 12     | 4    | `u32` BIN chunk length                   |
-| 16     | —    | JSON chunk (UTF-8, space-padded to 4)    |
-| 16+J   | —    | BIN chunk                                |
+| 16     | -    | JSON chunk (UTF-8, space-padded to 4)    |
+| 16+J   | -    | BIN chunk                                |
 
 Readers must reject unknown magic and unknown major versions.
 
@@ -64,7 +64,7 @@ Top-level object (`InrDoc`):
 
 ### 3.1 buffer_views
 
-`{ "offset": u32, "length": u32 }` — byte ranges into the BIN chunk.
+`{ "offset": u32, "length": u32 }` - byte ranges into the BIN chunk.
 Offsets are always 4-aligned, so `f32`/`u32` payloads can be reinterpreted
 zero-copy (or memory-mapped).
 
@@ -128,10 +128,10 @@ with their blend/opacity/tint.
 `compose_hint` is baked by the exporter from a conservative overlap
 analysis of the composite's child geometry across authored param samples:
 
-- `"children_disjoint"` — children proven pairwise disjoint at every
+- `"children_disjoint"` - children proven pairwise disjoint at every
   sampled pose; the group blend/opacity may be applied per child with
   identical results, skipping offscreen compositing.
-- `"children_overlap"` — children overlap at some pose, or the analysis
+- `"children_overlap"` - children overlap at some pose, or the analysis
   was inconclusive; correct rendering needs real offscreen compositing.
 
 Absent on identity composites and files from older exporters; readers
@@ -212,7 +212,7 @@ space** (`0..1`), each polygon a list of `[u, v]` points:
 
 These are alpha silhouettes baked by the exporter for parts referenced as
 mask sources. Renderers doing CPU mask clipping should use them as the
-source contour instead of the source mesh triangles — the mesh is usually
+source contour instead of the source mesh triangles - the mesh is usually
 a loose quad around the visible texture and would over-clip.
 
 Readers that render masks on the GPU (stencil/alpha test) can ignore this

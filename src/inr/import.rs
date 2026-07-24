@@ -1,5 +1,4 @@
-//! Import an INR file back into the parser IR ([`Puppet`]), so runtimes
-//! built on the IR work on `.inr` without changes.
+//! Import an INR file back into the parser IR ([`Puppet`]), so runtimes built on the IR work on `.inr` without changes.
 
 use std::collections::HashMap;
 
@@ -212,7 +211,7 @@ fn build_type(model: &InrModel, n: &InrNode) -> Result<NodeDataType, InrError> {
                 opacity: c.map(|c| c.opacity).unwrap_or(1.0),
                 mask: c.map(|c| build_masks(model, &c.masks)).unwrap_or_default(),
                 mask_threshold: c.map(|c| c.mask_threshold).unwrap_or(0.5),
-                propagate_meshgroup: None,
+                propagate_meshgroup: c.map(|c| c.propagate_meshgroup),
             })
         }
         InrNodeKind::Mask => NodeDataType::Mask(MaskData {
@@ -220,7 +219,8 @@ fn build_type(model: &InrModel, n: &InrNode) -> Result<NodeDataType, InrError> {
         }),
         InrNodeKind::MeshGroup => NodeDataType::MeshGroup(MeshGroupData {
             mesh: build_mesh(model, n.mesh.as_ref())?,
-            ..Default::default()
+            dynamic_deformation: n.mesh_group_dynamic,
+            translate_children: n.mesh_group_translate_children,
         }),
         InrNodeKind::SimplePhysics => {
             let p = n.physics.as_ref();

@@ -33,10 +33,9 @@ pub fn export_puppet(puppet: &Puppet) -> Result<Vec<u8>, InrError> {
 }
 
 /// Convert a parsed puppet into the typed INR document + binary blob, without
-/// serializing to the on-disk container format. Lets a consumer build an
-/// `InrModel { doc, bin }` directly in memory (no JSON round-trip, no file) -
-/// e.g. loading `.inx`/`.inp` straight into an INR-shaped runtime without
-/// writing an `.inr` to disk first.
+/// serializing to the on-disk container format. Lets a consumer build an 
+/// `InrModel { doc, bin }` directly in memory (no JSON round-trip, no file) - e.g. loading
+/// `.inx`/`.inp` straight into an INR-shaped runtime without writing an `.inr` to disk first.
 pub fn convert_puppet(puppet: &Puppet) -> Result<(InrDoc, Vec<u8>), InrError> {
     let mut bin = BinWriter::default();
 
@@ -63,11 +62,10 @@ pub fn convert_puppet(puppet: &Puppet) -> Result<(InrDoc, Vec<u8>), InrError> {
         .iter()
         .map(|tex| {
             let (width, height, mut rgba) = decode_texture(tex)?;
-            // Inochi2D sources are premultiplied in sRGB space. INR stores
-            // straight alpha so consumers can sample through hardware sRGB
-            // views (decode-then-premultiply is only correct with straight
-            // data). Color is dilated into transparent texels so bilinear
-            // filtering doesn't bleed black at edges.
+            // Inochi2D sources are premultiplied in sRGB space. INR stores straight
+            // alpha so consumers can sample through hardware sRGB views
+            // (decode-then-premultiply is only correct with straight data). Color is
+            // dilated into transparent texels so bilinear filtering doesn't bleed black at edges.
             unpremultiply(&mut rgba);
             dilate_edges(width as usize, height as usize, &mut rgba);
             Ok(TextureDesc {
@@ -455,18 +453,17 @@ fn binding_target_inr(name: &ParamName) -> InrBindingTarget {
     }
 }
 
-/// Some authoring tools pad names with trailing NULs (fixed-size buffers);
+/// Some authoring tools pad names with trailing NULs (fixed-size buffers); 
 /// strip them so INR JSON stays clean.
 fn clean_name(name: &str) -> String {
     name.trim_end_matches('\0').to_owned()
 }
 
-/// Bakes alpha silhouettes for every part used as a mask source. The runtime
-/// uses these contours instead of the source mesh triangles when CPU-clipping
-/// masked parts — the mesh is usually a loose quad and gives a coarse
-/// silhouette (visible as overshot mask edges on small shapes like blush or
-/// eye highlights). One threshold per source: the part's own `mask_threshold`
-/// (defaults to 0.5 when unset).
+/// Bakes alpha silhouettes for every part used as a mask source. The runtime uses
+/// these contours instead of the source mesh triangles when CPU-clipping masked
+/// parts - the mesh is usually a loose quad and gives a coarse silhouette 
+/// (visible as overshot mask edges on small shapes like blush or eye highlights).
+/// One threshold per source: the part's own `mask_threshold` (defaults to 0.5 when unset).
 fn bake_mask_contours(puppet: &Puppet) -> std::collections::BTreeMap<u32, Vec<Vec<[f32; 2]>>> {
     use std::collections::{BTreeMap, BTreeSet};
 
@@ -504,11 +501,10 @@ fn bake_mask_contours(puppet: &Puppet) -> std::collections::BTreeMap<u32, Vec<Ve
         };
         let raw = (part.mask_threshold.clamp(0.0, 1.0) * 255.0) as u8;
         let threshold = if raw == 0 { 128 } else { raw };
-        // Restrict marching squares to the part's UV footprint (+2 texel
-        // margin). With atlased textures (INP) the image holds EVERY part's
-        // alpha; an unrestricted pass hands each mask source the silhouette
-        // of the whole page — wrong clip shapes and 100–200 polygons per
-        // source (found 2026-07-19, all four INP test models affected).
+        // Restrict marching squares to the part's UV footprint (+2 texel margin).
+        // With atlased textures (INP) the image holds EVERY part's alpha; an
+        // unrestricted pass hands each mask source the silhouette of the whole page
+        // - wrong clip shapes and 100–200 polygons per source.
         let rect = part
             .mesh
             .as_ref()
@@ -548,9 +544,9 @@ fn bake_mask_contours(puppet: &Puppet) -> std::collections::BTreeMap<u32, Vec<Ve
     out
 }
 
-/// Pixel rect (x, y, w, h) covering the mesh's UV bbox clamped to the
-/// texture, expanded by a 2-texel margin. `None` when the mesh has no UVs
-/// or the rect degenerates (< 2px per side after clamping).
+/// Pixel rect (x, y, w, h) covering the mesh's UV bbox clamped to the texture,
+/// expanded by a 2-texel margin. `None` when the mesh has no UVs or the rect
+/// degenerates (< 2px per side after clamping).
 fn uv_pixel_rect(uvs: &[f32], w: u32, h: u32) -> Option<(u32, u32, u32, u32)> {
     if uvs.len() < 2 {
         return None;
@@ -583,29 +579,28 @@ fn crop_rgba(rgba: &[u8], w: u32, (rx, ry, rw, rh): (u32, u32, u32, u32)) -> Vec
     out
 }
 
-/// Quantize a float endpoint to a stable integer key for chain lookup.
-/// Cell-edge midpoints are deterministic floats but we still quantize to
-/// guard against denormal mismatches between adjacent cells.
+/// Quantize a float endpoint to a stable integer key for chain lookup. Cell-edge
+/// midpoints are deterministic floats but we still quantize to guard against
+/// denormal mismatches between adjacent cells.
 fn qkey(p: [f32; 2]) -> (i64, i64) {
     const Q: f32 = 1024.0;
     ((p[0] * Q).round() as i64, (p[1] * Q).round() as i64)
 }
 
-/// Marching squares on the alpha channel. Returns closed polygons in pixel
-/// space (origin at image top-left, y down). Outer contours and hole
-/// contours both come out; `drop_holes` filters the holes afterward.
+/// Marching squares on the alpha channel. Returns closed polygons in pixel space
+/// (origin at image top-left, y down). Outer contours and hole contours both come
+/// out; `drop_holes` filters the holes afterward.
 fn marching_squares_alpha(rgba: &[u8], w: u32, h: u32, threshold: u8) -> Vec<Vec<[f32; 2]>> {
     if w < 2 || h < 2 {
         return Vec::new();
     }
 
-    // Alpha is 0 outside the image bounds — a virtual transparent border.
-    // Without it, shapes that touch the texture edge (common: art painted
-    // flush to the UV island) leave an open isoline: marching squares never
-    // emits the closing segments along that edge, and the chain-walk breaks
-    // there, corrupting the contour. Iterating one extra cell ring around
-    // the image (x,y from -1..=w/h) lets those edge-touching shapes close
-    // naturally against the synthetic zero border.
+    // Alpha is 0 outside the image bounds - a virtual transparent border. Without
+    // it, shapes that touch the texture edge (common: art painted flush to the UV island)
+    // leave an open isoline: marching squares never emits the closing segments along
+    // that edge, and the chain-walk breaks there, corrupting the contour. Iterating
+    // one extra cell ring around the image (x,y from -1..=w/h) lets those
+    // edge-touching shapes close naturally against the synthetic zero border.
     let alpha = |x: i64, y: i64| -> u8 {
         if x < 0 || y < 0 || x >= w as i64 || y >= h as i64 {
             0
@@ -641,8 +636,8 @@ fn marching_squares_alpha(rgba: &[u8], w: u32, h: u32, threshold: u8) -> Vec<Vec
             let right = [fx + 1.0, fy + interp(tr, br)];
             let bottom = [fx + interp(bl, br), fy + 1.0];
             let left = [fx, fy + interp(tl, bl)];
-            // Edge orientation per config so the inside stays on the left
-            // while walking — yields CCW outer / CW hole polygons.
+            // Edge orientation per config so the inside stays on the left while
+            // walking - yields CCW outer / CW hole polygons.
             let add = |segs: &mut Vec<([f32; 2], [f32; 2])>, a, b| segs.push((a, b));
             match cfg {
                 1 => add(&mut segments, bottom, left),
@@ -650,7 +645,7 @@ fn marching_squares_alpha(rgba: &[u8], w: u32, h: u32, threshold: u8) -> Vec<Vec
                 3 => add(&mut segments, right, left),
                 4 => add(&mut segments, top, right),
                 5 => {
-                    // Saddle — resolve by the average corner.
+                    // Saddle - resolve by the average corner.
                     let avg = (tl as u32 + tr as u32 + br as u32 + bl as u32) / 4;
                     if (avg as u8) >= threshold {
                         add(&mut segments, top, right);
@@ -686,10 +681,10 @@ fn marching_squares_alpha(rgba: &[u8], w: u32, h: u32, threshold: u8) -> Vec<Vec
     chain_segments(segments)
 }
 
-/// Chain oriented segments into closed loops by matching each segment's end
-/// point to another segment's start point at the same location. Multiple
-/// segments can start at the same point (the corner shared by 4 cells), so
-/// the index is a `Vec` — pick the first unused match when walking.
+/// Chain oriented segments into closed loops by matching each segment's end point to
+/// another segment's start point at the same location. Multiple segments can start
+/// at the same point (the corner shared by 4 cells), so the index is a `Vec` - pick
+/// the first unused match when walking.
 fn chain_segments(segments: Vec<([f32; 2], [f32; 2])>) -> Vec<Vec<[f32; 2]>> {
     let mut by_start: BTreeMap<(i64, i64), Vec<usize>> = BTreeMap::new();
     for (i, seg) in segments.iter().enumerate() {
@@ -714,19 +709,10 @@ fn chain_segments(segments: Vec<([f32; 2], [f32; 2])>) -> Vec<Vec<[f32; 2]>> {
             let next = by_start
                 .get(&next_key)
                 .and_then(|cands| cands.iter().copied().find(|&n| !used[n]));
-            #[cfg(test)]
-            if let Some(cands) = by_start.get(&next_key) {
-                let unused: Vec<usize> = cands.iter().copied().filter(|&n| !used[n]).collect();
-                if unused.len() > 1 {
-                    diag_hooks::note_ambiguous(segments[cur].1, unused.len());
-                }
-            }
             match next {
                 Some(next) => cur = next,
                 None => {
                     poly.push(segments[cur].1);
-                    #[cfg(test)]
-                    diag_hooks::note_break(segments[cur].1);
                     break;
                 }
             }
@@ -738,39 +724,9 @@ fn chain_segments(segments: Vec<([f32; 2], [f32; 2])>) -> Vec<Vec<[f32; 2]>> {
     polygons
 }
 
-#[cfg(test)]
-mod diag_hooks {
-    //! Tracing sinks for `diag_tests::diag_back_hoodie` — flag chain breaks
-    //! and ambiguous branch points during chaining. No-ops unless a break
-    //! falls in the watched region; keeps normal test output quiet.
-    use std::cell::RefCell;
-
-    type Ambiguous = ([f32; 2], usize);
-
-    thread_local! {
-        static BREAKS: RefCell<Vec<[f32; 2]>> = const { RefCell::new(Vec::new()) };
-        static AMBIGUOUS: RefCell<Vec<Ambiguous>> = const { RefCell::new(Vec::new()) };
-    }
-
-    pub(super) fn note_break(p: [f32; 2]) {
-        BREAKS.with(|b| b.borrow_mut().push(p));
-    }
-
-    pub(super) fn note_ambiguous(p: [f32; 2], candidates: usize) {
-        AMBIGUOUS.with(|a| a.borrow_mut().push((p, candidates)));
-    }
-
-    pub(super) fn drain() -> (Vec<[f32; 2]>, Vec<Ambiguous>) {
-        (
-            BREAKS.with(|b| std::mem::take(&mut *b.borrow_mut())),
-            AMBIGUOUS.with(|a| std::mem::take(&mut *a.borrow_mut())),
-        )
-    }
-}
-
-/// Drops polygons whose centroid lies inside another, larger polygon —
-/// `i_overlay`'s NonZero fill rule then sees the outers only and we get a
-/// filled silhouette without holes.
+/// Drops polygons whose centroid lies inside another, larger polygon - `i_overlay`'s
+/// NonZero fill rule then sees the outers only and we get a filled silhouette
+/// without holes.
 fn drop_holes(polys: Vec<Vec<[f32; 2]>>) -> Vec<Vec<[f32; 2]>> {
     let areas: Vec<f32> = polys.iter().map(|p| signed_area(p).abs()).collect();
     let mut order: Vec<usize> = (0..polys.len()).collect();
@@ -838,8 +794,8 @@ fn douglas_peucker(pts: &[[f32; 2]], eps: f32) -> Vec<[f32; 2]> {
     if pts.len() < 4 {
         return pts.to_vec();
     }
-    // Find the pair of farthest-apart points to anchor the split — guarantees
-    // a stable starting baseline regardless of the input start index.
+    // Find the pair of farthest-apart points to anchor the split - guarantees a
+    // stable starting baseline regardless of the input start index.
     let (mut a, mut b) = (0usize, 0usize);
     let mut best = -1.0f32;
     for i in 0..pts.len() {
@@ -908,7 +864,7 @@ fn perp_distance(p: [f32; 2], a: [f32; 2], b: [f32; 2]) -> f32 {
 }
 
 // ---------------------------------------------------------------------------
-// Compose hints — conservative overlap analysis for non-identity composites
+// Compose hints - conservative overlap analysis for non-identity composites
 // ---------------------------------------------------------------------------
 
 /// 2D affine transform: `[a c tx; b d ty]` column-major pair layout.
@@ -927,7 +883,7 @@ impl Affine {
         }
     }
 
-    /// `self ∘ other` — apply `other` first, then `self`.
+    /// `self ∘ other` - apply `other` first, then `self`.
     fn then(&self, other: &Affine) -> Self {
         Self {
             m: [
@@ -951,15 +907,15 @@ impl Affine {
     }
 }
 
-/// A renderable child of a composite: the part's mesh plus the node chain
-/// from the composite's direct child down to the part (inclusive).
+/// A renderable child of a composite: the part's mesh plus the node chain from the
+/// composite's direct child down to the part (inclusive).
 struct ChildGeom<'a> {
     chain: Vec<&'a Node>,
     mesh: &'a Mesh,
 }
 
-/// Pose = one param driven to a fractional grid coordinate, all other params
-/// at rest. `None` is the rest pose.
+/// Pose = one param driven to a fractional grid coordinate, all other params at
+/// rest. `None` is the rest pose.
 type Pose<'a> = Option<(&'a Param, f32, f32)>;
 
 /// Decide, for every non-identity composite, whether its child parts can ever
@@ -967,12 +923,11 @@ type Pose<'a> = Option<(&'a Param, f32, f32)>;
 /// distributable per child (`ChildrenDisjoint`), which lets a renderer skip
 /// offscreen compositing entirely.
 ///
-/// Sampled poses: rest, plus every authored grid point of every param binding
-/// that moves nodes inside the composite, plus midpoints between adjacent
-/// grid points (linear interpolation between samples can produce poses not
-/// bounded by the endpoints, midpoints halve that blind spot). Anything the
-/// analysis cannot model exactly — MeshGroup deforms, X/Y rotations, unknown
-/// binding targets — resolves to `ChildrenOverlap`.
+/// Sampled poses: rest, plus every authored grid point of every param binding that
+/// moves nodes inside the composite, plus midpoints between adjacent grid points
+/// (linear interpolation between samples can produce poses not bounded by the endpoints, midpoints halve that blind spot).
+/// Anything the analysis cannot model exactly - MeshGroup deforms, X/Y rotations,
+/// unknown binding targets - resolves to `ChildrenOverlap`.
 fn bake_compose_hints(puppet: &Puppet) -> HashMap<u32, InrComposeHint> {
     let mut out = HashMap::default();
     for node in puppet.nodes.iter() {
@@ -986,11 +941,10 @@ fn bake_compose_hints(puppet: &Puppet) -> HashMap<u32, InrComposeHint> {
     out
 }
 
-/// Diagnostic-only: explains why `analyze_composite` classified a composite
-/// as `ChildrenOverlap` instead of the faster `ChildrenDisjoint` path. Debug
-/// builds only - this runs on every load of an .inx/.inp puppet (loaders
-/// convert through the same INR path this analysis is part of), so it'd be
-/// release-build console noise otherwise.
+/// Diagnostic-only: explains why `analyze_composite` classified a composite as
+/// `ChildrenOverlap` instead of the faster `ChildrenDisjoint` path. Debug builds
+/// only - this runs on every load of an .inx/.inp puppet (loaders convert through the same INR path this analysis is part of),
+/// so it'd be release-build console noise otherwise.
 macro_rules! hint_eprintln {
     ($($arg:tt)*) => {
         #[cfg(debug_assertions)]
@@ -1056,9 +1010,9 @@ fn analyze_composite(composite: &Node, puppet: &Puppet) -> InrComposeHint {
                 // Depth/opacity never move 2D geometry.
                 ParamName::TransformTZ | ParamName::Opacity => {}
                 ParamName::Deform => {
-                    // Deforms are only modelled on the parts themselves. A
-                    // deform on an intermediate node (MeshGroup) warps the
-                    // children through grid interpolation — not modelled.
+                    // Deforms are only modelled on the parts themselves. A deform on
+                    // an intermediate node (MeshGroup) warps the children through
+                    // grid interpolation - not modelled.
                     if !part_uuids.contains(&b.node) {
                         hint_eprintln!("[hint/{}] doubt: deform on intermediate node {} (param '{}')", composite.name, b.node, param.name);
                         return ChildrenOverlap;
@@ -1076,8 +1030,7 @@ fn analyze_composite(composite: &Node, puppet: &Puppet) -> InrComposeHint {
         }
     }
 
-    // Pose sweep. Rest first (cheap early exit for statically overlapping
-    // children).
+    // Pose sweep. Rest first (cheap early exit for statically overlapping children).
     let mut poses: Vec<Pose> = vec![None];
     for param in relevant {
         let (nx, ny) = param_grid_dims(param);
@@ -1139,8 +1092,8 @@ fn param_grid_dims(param: &Param) -> (usize, usize) {
     (nx, ny)
 }
 
-/// Vertices of one composite child in composite-local space at `pose`.
-/// Returns `None` when binding tables disagree with the mesh/grid shape.
+/// Vertices of one composite child in composite-local space at `pose`. Returns
+/// `None` when binding tables disagree with the mesh/grid shape.
 fn child_world_vertices(child: &ChildGeom, pose: &Pose) -> Option<Vec<[f32; 2]>> {
     let vcount = child.mesh.vertices.len() / 2;
     let mut verts: Vec<[f32; 2]> = (0..vcount)
@@ -1179,16 +1132,15 @@ fn child_world_vertices(child: &ChildGeom, pose: &Pose) -> Option<Vec<[f32; 2]>>
     for node in &child.chain {
         world = world.then(&node_affine(node, pose)?);
     }
-    // world currently maps part-space -> composite-space applying the top of
-    // the chain last; composition above already ordered top-down because
-    // `then` applies the right-hand side first and we fold left-to-right
-    // from the composite's direct child down to the part.
+    // world currently maps part-space -> composite-space applying the top of the
+    // chain last; composition above already ordered top-down because `then` applies
+    // the right-hand side first and we fold left-to-right from the composite's
+    // direct child down to the part.
     Some(verts.iter().map(|v| world.apply(*v)).collect())
 }
 
-/// Local affine of a node at `pose` (base transform + binding offsets).
-/// Translation and Z-rotation offsets add; scale offsets multiply — matching
-/// runtime semantics.
+/// Local affine of a node at `pose` (base transform + binding offsets). Translation
+/// and Z-rotation offsets add; scale offsets multiply - matching runtime semantics.
 fn node_affine(node: &Node, pose: &Pose) -> Option<Affine> {
     let mut tx = node.transform.translation[0];
     let mut ty = node.transform.translation[1];
@@ -1229,9 +1181,9 @@ fn node_affine(node: &Node, pose: &Pose) -> Option<Affine> {
     Some(Affine::from_trs([tx, ty], rz, [sx, sy]))
 }
 
-/// Bilinear interpolation over a grid at fractional coords, clamped to the
-/// grid. Returns `None` if the fractional coords land outside a 1-cell
-/// overshoot of the table (shape mismatch).
+/// Bilinear interpolation over a grid at fractional coords, clamped to the grid.
+/// Returns `None` if the fractional coords land outside a 1-cell overshoot of the
+/// table (shape mismatch).
 fn bilinear(
     fx: f32,
     fy: f32,
@@ -1272,8 +1224,8 @@ fn aabb_overlap(a: ([f32; 2], [f32; 2]), b: ([f32; 2], [f32; 2])) -> bool {
     a.0[0] <= b.1[0] && b.0[0] <= a.1[0] && a.0[1] <= b.1[1] && b.0[1] <= a.1[1]
 }
 
-/// Exact triangle-vs-triangle sweep between two indexed meshes. Zero-area
-/// triangles cover no pixels and are skipped.
+/// Exact triangle-vs-triangle sweep between two indexed meshes. Zero-area triangles
+/// cover no pixels and are skipped.
 fn meshes_overlap(va: &[[f32; 2]], ia: &[u32], vb: &[[f32; 2]], ib: &[u32]) -> bool {
     const AREA_EPS: f32 = 1e-9;
     let tris = |v: &[[f32; 2]], idx: &[u32]| -> Vec<[[f32; 2]; 3]> {
@@ -1306,8 +1258,8 @@ fn tri_area2(t: &[[f32; 2]; 3]) -> f32 {
     (t[1][0] - t[0][0]) * (t[2][1] - t[0][1]) - (t[2][0] - t[0][0]) * (t[1][1] - t[0][1])
 }
 
-/// SAT overlap test for two non-degenerate triangles. Shared edges/vertices
-/// count as overlap (conservative).
+/// SAT overlap test for two non-degenerate triangles. Shared edges/vertices count as
+/// overlap (conservative).
 fn tris_overlap(a: &[[f32; 2]; 3], b: &[[f32; 2]; 3]) -> bool {
     !(has_separating_axis(a, b) || has_separating_axis(b, a))
 }
@@ -1337,123 +1289,4 @@ fn has_separating_axis(a: &[[f32; 2]; 3], b: &[[f32; 2]; 3]) -> bool {
         }
     }
     false
-}
-
-#[cfg(test)]
-mod diag_tests {
-    //! Temporary instrumentation for the Back Hoodie contour bug
-    //! (2026-07-03). Run manually: `cargo test --features inr,inr-export
-    //! diag_back_hoodie -- --ignored --nocapture`. Not part of CI — depends
-    //! on an asset path outside this repo. Remove once the fix lands.
-    use super::*;
-
-    #[test]
-    #[ignore]
-    fn diag_back_hoodie() {
-        let path = "/home/husky/Rust/dev-bevy_inochi2d/assets/Arch Chan.inr";
-        let model = crate::inr::InrModel::open(path).expect("open inr");
-        let node = model
-            .doc
-            .nodes
-            .iter()
-            .find(|n| n.name == "Back Hoodie")
-            .expect("part not found");
-        let part = node.part.as_ref().expect("no part");
-        let tex = &model.doc.textures[part.textures[0] as usize];
-        let raw = model.view_bytes(tex.view).expect("view bytes");
-        let (w, h) = (tex.width, tex.height);
-
-        let raw_threshold = 128u8;
-        let contours = marching_squares_alpha(raw, w, h, raw_threshold);
-
-        let (breaks, ambiguous) = diag_hooks::drain();
-        println!(
-            "chain breaks: {} total, in x=[470..670]: {}",
-            breaks.len(),
-            breaks.iter().filter(|p| p[0] >= 470.0 && p[0] <= 670.0).count()
-        );
-        for p in breaks.iter().filter(|p| p[0] >= 470.0 && p[0] <= 670.0) {
-            println!("  break at ({:.2}, {:.2}) u=({:.4}, {:.4})", p[0], p[1], p[0] / w as f32, p[1] / h as f32);
-        }
-        println!(
-            "ambiguous branch points: {} total, in x=[470..670]: {}",
-            ambiguous.len(),
-            ambiguous.iter().filter(|(p, _)| p[0] >= 470.0 && p[0] <= 670.0).count()
-        );
-        for (p, n) in ambiguous.iter().filter(|(p, _)| p[0] >= 470.0 && p[0] <= 670.0) {
-            println!("  ambiguous at ({:.2}, {:.2}) candidates={n}", p[0], p[1]);
-        }
-
-        println!("raw marching-squares polygons: {}", contours.len());
-        for (i, c) in contours.iter().enumerate() {
-            let area = signed_area(c).abs();
-            let xs = c.iter().map(|p| p[0]).fold(f32::INFINITY, f32::min)
-                ..c.iter().map(|p| p[0]).fold(f32::NEG_INFINITY, f32::max);
-            println!(
-                "  raw[{i}] pts={} area={:.1} x=[{:.1}..{:.1}] (u=[{:.4}..{:.4}])",
-                c.len(),
-                area,
-                xs.start,
-                xs.end,
-                xs.start / w as f32,
-                xs.end / w as f32,
-            );
-        }
-
-        let big: Vec<Vec<[f32; 2]>> = contours
-            .into_iter()
-            .filter(|c| signed_area(c).abs() >= 4.0)
-            .collect();
-        println!("after area>=4.0 filter: {}", big.len());
-
-        let outers = drop_holes(big);
-        println!("after drop_holes: {}", outers.len());
-        for (i, c) in outers.iter().enumerate() {
-            let xs = c.iter().map(|p| p[0]).fold(f32::INFINITY, f32::min)
-                ..c.iter().map(|p| p[0]).fold(f32::NEG_INFINITY, f32::max);
-            println!(
-                "  outer[{i}] pts={} x=[{:.1}..{:.1}] (u=[{:.4}..{:.4}])",
-                c.len(),
-                xs.start,
-                xs.end,
-                xs.start / w as f32,
-                xs.end / w as f32,
-            );
-        }
-
-        let simplified: Vec<Vec<[f32; 2]>> = outers
-            .into_iter()
-            .map(|c| douglas_peucker(&c, 1.0))
-            .filter(|c| c.len() >= 3)
-            .collect();
-        let mut img = image::RgbaImage::from_raw(w, h, raw.to_vec()).expect("build image");
-        for p in &simplified {
-            for i in 0..p.len() {
-                let a = p[i];
-                let b = p[(i + 1) % p.len()];
-                draw_line_diag(&mut img, a[0], a[1], b[0], b[1]);
-            }
-        }
-        img.save("/tmp/back_hoodie_overlay_fixed2.png").expect("save png");
-        println!("fixed overlay written to /tmp/back_hoodie_overlay_fixed2.png");
-    }
-
-    fn draw_line_diag(img: &mut image::RgbaImage, x0: f32, y0: f32, x1: f32, y1: f32) {
-        let steps = (x1 - x0).abs().max((y1 - y0).abs()).ceil() as i32 + 1;
-        let (w, h) = img.dimensions();
-        for i in 0..=steps {
-            let t = i as f32 / steps as f32;
-            let x = (x0 + (x1 - x0) * t).round() as i64;
-            let y = (y0 + (y1 - y0) * t).round() as i64;
-            for dx in -1..=1 {
-                for dy in -1..=1 {
-                    let px = x + dx;
-                    let py = y + dy;
-                    if px >= 0 && py >= 0 && (px as u32) < w && (py as u32) < h {
-                        img.put_pixel(px as u32, py as u32, image::Rgba([255, 0, 0, 255]));
-                    }
-                }
-            }
-        }
-    }
 }

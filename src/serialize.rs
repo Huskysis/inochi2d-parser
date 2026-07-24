@@ -19,12 +19,14 @@ use crate::owned::*;
 //      u32 BE            payload length + payload bytes
 
 impl Puppet {
+    /// Serializes to the INX/INP binary format in memory.
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut buf = Vec::new();
         self.write_to(&mut buf).expect("write to Vec never fails");
         buf
     }
 
+    /// Serializes to the INX/INP binary format, writing directly to `w`.
     pub fn write_to<W: Write>(&self, w: &mut W) -> std::io::Result<()> {
         // Build a JSON where everything is written, preserving float format
         let mut json_buf = Vec::new();
@@ -72,6 +74,7 @@ impl Puppet {
         Ok(())
     }
 
+    /// Serializes to the INX/INP binary format and writes it to `path`.
     pub fn save<P: AsRef<std::path::Path>>(&self, path: P) -> std::io::Result<()> {
         let mut file = std::fs::File::create(path)?;
         self.write_to(&mut file)
@@ -80,8 +83,8 @@ impl Puppet {
 
 struct JsonWriter<'w, W: Write> {
     w: &'w mut W,
-    /// First write error, if any. Checked once at the end so the
-    /// per-value writer methods stay infallible at the call sites.
+    /// First write error, if any. Checked once at the end so the per-value writer
+    /// methods stay infallible at the call sites.
     err: Option<std::io::Error>,
 }
 
@@ -155,8 +158,8 @@ impl<'w, W: Write> JsonWriter<'w, W> {
         self.raw(&v.to_string());
     }
 
-    /// Format f32 keeping the .0 for integer values and limiting precision.
-    /// This is the closest we get to keeping 55.0 as 55.0, 0.15 as 0.15.
+    /// Format f32 keeping the .0 for integer values and limiting precision. This is
+    /// the closest we get to keeping 55.0 as 55.0, 0.15 as 0.15.
     fn f32_val(&mut self, v: f32) {
         if v.is_nan() {
             self.raw("0.0");
@@ -733,10 +736,8 @@ impl FlatTransformValues {
 
 impl FlatDeformValues {
     fn write_json_shaped<W: Write>(&self, j: &mut JsonWriter<W>, x_count: usize, y_count: usize) {
-        // FlatDeformValues data layout:
-        //   frames = x_count
-        //   vertices_per_frame = y_count * actual_vertex_count
-        //   data[x * vpf + y * actual_vtx + v] = [dx, dy]
+        // FlatDeformValues data layout: frames = x_count vertices_per_frame =
+        // y_count * actual_vertex_count data[x * vpf + y * actual_vtx + v] = [dx, dy]
         //
         // Output JSON: values[x][y][v] = [dx, dy]
         let actual_vtx = if y_count > 0 {
@@ -893,7 +894,8 @@ fn write_mesh<W: Write>(j: &mut JsonWriter<W>, mesh: Option<&Mesh>) {
             j.end_obj();
         }
         None => {
-            // Matches original format: {"verts":[],"indices":null,"origin":[0.0,0.0]}
+            // Matches original format:
+            // {"verts":[],"indices":null,"origin":[0.0,0.0]}
             j.begin_obj();
             j.key("verts");
             j.begin_arr();

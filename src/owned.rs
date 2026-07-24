@@ -21,8 +21,8 @@ fn read_be_u32<R: Read>(data: &mut R) -> std::io::Result<u32> {
     Ok(u32::from_be_bytes(buf))
 }
 
-/// Reads `n` bytes growing the buffer incrementally, so a corrupt
-/// length field cannot trigger a huge upfront allocation.
+/// Reads `n` bytes growing the buffer incrementally, so a corrupt length field
+/// cannot trigger a huge upfront allocation.
 #[inline]
 fn read_vec<R: Read>(data: &mut R, n: usize) -> std::io::Result<Vec<u8>> {
     let mut buf = Vec::new();
@@ -36,8 +36,8 @@ fn read_vec<R: Read>(data: &mut R, n: usize) -> std::io::Result<Vec<u8>> {
     Ok(buf)
 }
 
-/// Root structure of the Inochi2D puppet model.
-/// Contains metadata, physics, node tree, animation parameters and visual organization.
+/// Root structure of the Inochi2D puppet model. Contains metadata, physics, node
+/// tree, animation parameters and visual organization.
 #[derive(Clone, Debug)]
 pub struct Puppet {
     /// Creator, version and rights information.
@@ -250,9 +250,12 @@ impl Meta {
     }
 }
 
+/// Global physics configuration for the whole puppet.
 #[derive(Clone, Debug)]
 pub struct Physics {
+    /// Pixels-per-meter scale used by simulated nodes.
     pub pixels_per_meter: f32,
+    /// Gravity applied to simulated nodes.
     pub gravity: f32,
 }
 
@@ -281,8 +284,7 @@ pub struct Node {
     /// If false, the node and its children are not rendered.
     pub enabled: bool,
 
-    /// Z order (depth) in render.
-    /// Higher values = more in front.
+    /// Z order (depth) in render. Higher values = more in front.
     pub zsort: f32,
 
     /// Local transform (position, rotation, scale).
@@ -342,8 +344,7 @@ impl<'a> Iterator for NodeIter<'a> {
     }
 }
 
-/// Local transform of a node.
-/// Applied relative to parent node.
+/// Local transform of a node. Applied relative to parent node.
 #[derive(Debug, Clone, Default, Copy)]
 pub struct Transform {
     /// Translation (x, y, z in pixels).
@@ -411,42 +412,50 @@ impl NodeDataType {
         }
     }
 
+    /// Returns the `PartData` if this node is a `Part`, `None` otherwise.
     pub fn as_part(&self) -> Option<&PartData> {
         match self {
             Self::Part(d) => Some(d),
             _ => None,
         }
     }
+    /// Returns the `CompositeData` if this node is a `Composite`, `None` otherwise.
     pub fn as_composite(&self) -> Option<&CompositeData> {
         match self {
             Self::Composite(d) => Some(d),
             _ => None,
         }
     }
+    /// Returns the `MaskData` if this node is a `Mask`, `None` otherwise.
     pub fn as_mask(&self) -> Option<&MaskData> {
         match self {
             Self::Mask(d) => Some(d),
             _ => None,
         }
     }
+    /// Returns the `MeshGroupData` if this node is a `MeshGroup`, `None` otherwise.
     pub fn as_mesh_group(&self) -> Option<&MeshGroupData> {
         match self {
             Self::MeshGroup(d) => Some(d),
             _ => None,
         }
     }
+    /// Returns the `CameraData` if this node is a `Camera`, `None` otherwise.
     pub fn as_camera(&self) -> Option<&CameraData> {
         match self {
             Self::Camera(d) => Some(d),
             _ => None,
         }
     }
+    /// Returns the `SimplePhysicsData` if this node is a `SimplePhysics`, `None` otherwise.
     pub fn as_simple_physics(&self) -> Option<&SimplePhysicsData> {
         match self {
             Self::SimplePhysics(d) => Some(d),
             _ => None,
         }
     }
+    /// True if this node carries no specific type data (fallback for unknown
+    /// or unhandled node types).
     pub fn is_generic(&self) -> bool {
         matches!(self, Self::Generic)
     }
@@ -506,9 +515,12 @@ impl MaskData {
     }
 }
 
+/// A single mask reference held by a `Part` or `Composite`.
 #[derive(Debug, Clone, Default)]
 pub struct Mask {
+    /// UUID of the node providing the mask shape.
     pub source: u32,
+    /// How the mask is applied (clip inside vs outside).
     pub mode: MaskMode,
 }
 
@@ -848,6 +860,7 @@ pub enum BlendMode {
 }
 
 impl BlendMode {
+    /// Parses an Inochi2D blend mode name (case-insensitive). Returns `None` for unrecognized names.
     #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
@@ -875,6 +888,7 @@ impl BlendMode {
     }
 }
 
+/// Animatable parameter (slider/dial) that drives node bindings.
 #[derive(Clone, Debug)]
 pub struct Param {
     /// Parent node UUID (hierarchical parameter organization).
@@ -1072,8 +1086,7 @@ fn parse_param_name(s: Option<&str>) -> ParamName {
     }
 }
 
-/// Keyframe values for a binding.
-/// Can be transform (scalar) or deformation (vertices).
+/// Keyframe values for a binding. Can be transform (scalar) or deformation (vertices).
 #[derive(Debug, Clone)]
 pub enum BindingValues {
     /// Values for transform/opacity properties (1 value per frame).
@@ -1086,10 +1099,9 @@ pub enum BindingValues {
     Other(json::JsonValue),
 }
 
-/// Efficient storage of scalar binding values.
-/// Deserialized from `Vec<Vec<f32>>` (parameter axis-point grid [x][y])
-/// but stored flat. `frames` = points on the X axis,
-/// `values_per_frame` = points on the Y axis (1 for non-vec2 params).
+/// Efficient storage of scalar binding values. Deserialized from `Vec<Vec<f32>>`
+/// (parameter axis-point grid [x][y]) but stored flat. `frames` = points on the X
+/// axis, `values_per_frame` = points on the Y axis (1 for non-vec2 params).
 #[derive(Debug, Clone)]
 pub struct FlatTransformValues {
     /// Flat data buffer: [x0_y0, x0_y1, ..., x1_y0, ...]
@@ -1103,6 +1115,7 @@ pub struct FlatTransformValues {
 }
 
 impl FlatTransformValues {
+    /// Parses a `Vec<Vec<f32>>`-shaped JSON grid into the flat layout.
     pub fn new(values: &json::JsonValue) -> Self {
         let parsed: Vec<Vec<f32>> = values
             .as_array()
@@ -1138,8 +1151,7 @@ impl FlatTransformValues {
             values_per_frame,
         }
     }
-    /// Get a specific value from a frame and index.
-    /// O(1) access with linear indexing.
+    /// Get a specific value from a frame and index. O(1) access with linear indexing.
     pub fn get(&self, frame: usize, index: usize) -> Option<f32> {
         if frame >= self.frames || index >= self.values_per_frame {
             return None;
@@ -1160,10 +1172,9 @@ impl FlatTransformValues {
     }
 }
 
-/// Efficient storage of deformation binding values.
-/// Deserialized from `values[x][y][vertex] = [dx, dy]` but stored flat.
-/// `frames` = points on the X axis; `vertices_per_frame` flattens
-/// the Y axis together with the per-vertex offsets.
+/// Efficient storage of deformation binding values. Deserialized from
+/// `values[x][y][vertex] = [dx, dy]` but stored flat. `frames` = points on the X
+/// axis; `vertices_per_frame` flattens the Y axis together with the per-vertex offsets.
 #[derive(Debug, Clone)]
 pub struct FlatDeformValues {
     /// Flat offset buffer: [x0_v0, x0_v1, ..., x1_v0, ...]
@@ -1172,12 +1183,12 @@ pub struct FlatDeformValues {
     /// Number of points on the X axis (outer array length).
     pub frames: usize,
 
-    /// Number of [dx, dy] entries per X-axis point
-    /// (Y-axis points × vertex count).
+    /// Number of [dx, dy] entries per X-axis point (Y-axis points × vertex count).
     pub vertices_per_frame: usize,
 }
 
 impl FlatDeformValues {
+    /// Parses a `values[x][y][vertex] = [dx, dy]`-shaped JSON grid into the flat layout.
     pub fn new(values: &json::JsonValue) -> Self {
         let frames_data: Vec<Vec<[f32; 2]>> = values
             .as_array()
@@ -1225,8 +1236,7 @@ impl FlatDeformValues {
             vertices_per_frame,
         }
     }
-    /// Get the [x, y] offset of a vertex at a specific frame.
-    /// O(1) access with direct index computation.
+    /// Get the [x, y] offset of a vertex at a specific frame. O(1) access with direct index computation.
     pub fn get(&self, frame: usize, vertex: usize) -> Option<[f32; 2]> {
         if frame >= self.frames || vertex >= self.vertices_per_frame {
             return None;
@@ -1245,8 +1255,7 @@ impl FlatDeformValues {
         self.vertices_per_frame
     }
 
-    /// Get all offsets of a frame (extracted slice).
-    /// Useful for applying full deformation to a mesh.
+    /// Get all offsets of a frame (extracted slice). Useful for applying full deformation to a mesh.
     pub fn get_frame(&self, frame: usize) -> Option<&[[f32; 2]]> {
         if frame >= self.frames {
             return None;
@@ -1256,6 +1265,7 @@ impl FlatDeformValues {
     }
 }
 
+/// How multiple bindings affecting the same target are combined.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MergeMode {
     /// Sums effects (default for rotation, deform).
@@ -1307,13 +1317,11 @@ fn parse_interpolation(s: Option<&str>) -> Interpolation {
     }
 }
 
-/// Automation track (placeholder struct).
-/// Not implemented in this model, pending definition.
+/// Automation track (placeholder struct). Not implemented in this model, pending definition.
 #[derive(Clone, Debug)]
 pub struct Automation {}
 
-/// Pre-recorded animation clip.
-/// Controls puppet parameters over time.
+/// Pre-recorded animation clip. Controls puppet parameters over time.
 #[derive(Debug, Clone)]
 pub struct Animation {
     /// Identifier name.
@@ -1496,8 +1504,7 @@ fn parse_keyframes(v: &json::JsonValue) -> Vec<Keyframe> {
         .collect()
 }
 
-/// Node group for visual organization in editor.
-/// The "folders" you see in the UI, for easier navigation.
+/// Node group for visual organization in editor. The "folders" you see in the UI, for easier navigation.
 #[derive(Clone, Debug)]
 pub struct Group {
     /// Unique group UUID.
@@ -1564,13 +1571,11 @@ impl TextureFormat {
         }
     }
 
-    /// Gets width and height of an image from its bytes,
-    /// according to the texture format.
+    /// Gets width and height of an image from its bytes, according to the texture format.
     pub fn get_img_dim(&self, data: &[u8]) -> std::io::Result<(u32, u32)> {
         match self {
             TextureFormat::Png => {
-                // PNG header:
-                // Width and height are in bytes 16–23 (big endian)
+                // PNG header: Width and height are in bytes 16–23 (big endian)
                 if data.len() < 24 {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
@@ -1585,8 +1590,7 @@ impl TextureFormat {
             }
 
             TextureFormat::Tga => {
-                // TGA header:
-                // Width in bytes 12–13 and height in 14–15 (little endian)
+                // TGA header: Width in bytes 12–13 and height in 14–15 (little endian)
                 if data.len() < 18 {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
@@ -1601,9 +1605,8 @@ impl TextureFormat {
             }
 
             TextureFormat::Bc7 => {
-                // BC7 has no standard header of its own.
-                // Typically found inside DDS or KTX containers.
-                // For now we return placeholder values.
+                // BC7 has no standalone header (it lives inside DDS/KTX containers),
+                // so dimensions aren't recoverable here.
                 Ok((0, 0))
             }
         }
@@ -1646,14 +1649,12 @@ impl Texture {
         }
     }
 
-    /// Try to compute the texture dimensions from
-    /// the encoded data and the format.
+    /// Try to compute the texture dimensions from the encoded data and the format.
     pub fn dimensions_from_data(&self) -> std::io::Result<(u32, u32)> {
         match &self.data {
             TextureData::Encoded(bytes) => self.format.get_img_dim(bytes),
             TextureData::Rgba(_) => {
-                // If data is already decoded, use
-                // the stored dimensions
+                // If data is already decoded, use the stored dimensions
                 Ok((self.width, self.height))
             }
         }

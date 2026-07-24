@@ -31,6 +31,8 @@ fn sample_doc() -> (InrDoc, Vec<u8>) {
             translation: [0.0; 3],
             rotation: [0.0; 3],
             scale: [1.0, 1.0],
+            mesh_group_dynamic: false,
+            mesh_group_translate_children: false,
             mesh: None,
             part: None,
             composite: None,
